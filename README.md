@@ -1,0 +1,118 @@
+# NVNM Multisig
+
+A **lightweight [Safe](https://safe.global) multisig UI** for **NVNM Chain** — a
+Tempo-compatible L1 (EVM + Tempo transactions), with **no backend**: it talks
+directly to the chain RPC and keeps pending transactions in the browser.
+
+- **Network:** NVNM Testnet — chain id `787223`, RPC `https://rpc.nvnm.testnet.nvnmchain.io`
+- **Fee token:** `nUSD` / `pathUSD` (`0x20c0…0000`, TIP-20, 6 decimals). There is
+  no native gas token — the protocol FeeManager charges a TIP-20 and plain
+  EIP-1559 transactions default to the fee token.
+- **Safe version:** v1.3.0 (SafeL2 singleton), deployed at the official **eip155** addresses.
+
+## Features
+
+- **One-time contract setup** — deploys the Safe v1.3.0 singleton, proxy factory,
+  compatibility fallback handler and MultiSendCallOnly at the official **eip155**
+  addresses.
+- **Create a Safe** — owners + threshold + salt nonce; the Safe address is
+  derived and shown *before* deployment.
+- **Load a Safe** — read version, owners, threshold, nonce and balances.
+- **New transaction** — token transfers or raw contract calls; multiple calls
+  are batched through `MultiSendCallOnly` (delegatecall).
+- **Off-chain signatures** — owners sign the SafeTx EIP-712 payload in their
+  wallet; signatures are collected locally and can be **exported / imported**
+  as JSON to coordinate between signers.
+- **Execute** — once the threshold is reached, anyone can submit
+  `execTransaction`.
+- **Queue** — pending transactions, signature status, stale-nonce detection.
+
+## How the Safe contracts get deployed
+
+The chain pre-deploys the deterministic **Safe singleton factory** (a.k.a.
+"SafeDeployer"; calldata = `salt ‖ initcode`):
+
+| Factory | Address |
+| --- | --- |
+| Safe singleton factory ("SafeDeployer") | `0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7` |
+
+Safe contracts are deployed **once**, through it with a zero salt, which
+reproduces the official Safe v1.3.0 **"eip155"** addresses:
+
+| Contract | Address |
+| --- | --- |
+| SafeL2 singleton | `0xfb1bffC9d739B8D520DaF37dF666da4C687191EA` |
+| SafeProxyFactory | `0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC` |
+| CompatibilityFallbackHandler | `0x017062a1dE2FE6b99BE3d9d37841FeD19F573804` |
+| MultiSendCallOnly | `0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B` |
+
+The exact creation bytecode from `@gnosis.pm/safe-contracts@1.3.0` is bundled in
+`src/lib/safeArtifacts.ts`; the runtime code hashes match
+`@safe-global/safe-deployments` and every CREATE2 address was re-derived from the
+factory + bytecode.
+
+> **Note.** The same bytecode deployed through the Arachnid factory
+> (`0x4e59b44847b379578588920cA78FbF26c0B4956C`) instead lands on Safe's
+> **"canonical"** address set (`SafeL2 0x3E5c6364…`, `SafeProxyFactory 0xa6B71E26…`).
+> This app targets the eip155 set; switching is only a matter of changing
+> `CREATE2_FACTORY` + `SAFE_ADDRESSES` in `src/lib/safeArtifacts.ts`.
+
+## Quick start
+
+```bash
+npm install
+npm run dev      # http://localhost:5174
+npm run build    # production bundle in dist/
+```
+
+Then:
+
+1. Connect an injected wallet (MetaMask / Rabby) and confirm the NVNM network
+   (the UI offers to add it).
+2. **Contracts** tab → *Deploy missing contracts* (one-time, a few transactions
+   paid in the fee token).
+3. **Create / Load** tab → create a Safe, or load an existing address.
+4. **New transaction** tab → build a transfer / call, sign it (EIP-712).
+5. **Queue** tab → collect the remaining signatures (Export / Import to share)
+   and *Execute*.
+
+## Verifying the Safe integration
+
+`scripts/verify-safe.ts` deploys the real Safe v1.3.0 contracts to a local
+[anvil](https://book.getfoundry.sh/anvil/) node and checks the whole pipeline:
+address prediction, owner sorting, EIP-712 hashing, signature recovery,
+`execTransaction` and a MultiSend batch executed through the Safe.
+
+```bash
+anvil --port 8546 &
+RPC=http://127.0.0.1:8546 npm run verify:safe   # requires bun
+```
+
+Expected output ends with `ALL CHECKS PASSED`.
+
+## Project layout
+
+```
+src/
+  chain.ts               network config, formatting, explorer links
+  lib/
+    safeArtifacts.ts     eip155 addresses + v1.3.0 creation bytecode (generated)
+    safe.ts              setup encoding, address prediction, SafeTx hash, sig packing, MultiSend
+    abi.ts               minimal Safe / factory / TIP-20 ABIs
+    hooks.ts             useSafeInfo / useTokenMeta / useTokenBalance
+    storage.ts           localStorage: queued transactions + tracked Safes
+    wallet.ts            injected-wallet hook (viem)
+  components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard, NewTransaction, Queue
+```
+
+## Security notes
+
+- **Testnet software.** Not audited; use at your own risk.
+- Signatures are collected **off-chain** and stored in this browser's
+  `localStorage`. Treat exported signature JSON as sensitive until the
+  transaction is executed (a signed SafeTx can be executed by anyone once the
+  threshold is met).
+- A queued transaction is only executable while the Safe's nonce still matches;
+  the Queue flags stale nonces.
+- Always verify the Safe address, target, value and calldata in your wallet
+  before signing.
