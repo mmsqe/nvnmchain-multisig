@@ -31,6 +31,8 @@ directly to the chain RPC and keeps pending transactions in the browser.
 - **Execute** — once the threshold is reached, anyone can submit
   `execTransaction`.
 - **Queue** — pending transactions, approval status, stale-nonce detection.
+- **Light / dark theme** — follows the OS preference by default, with a header
+  toggle that persists the choice (`localStorage`).
 
 ## How the Safe contracts get deployed
 
@@ -69,6 +71,10 @@ npm install
 npm run dev      # http://localhost:5174
 npm run build    # production bundle in dist/
 ```
+
+The interface ships with the NVNM logo (also the favicon) and a light/dark theme:
+no stored preference means it tracks `prefers-color-scheme`, and the sun/moon
+button in the header pins an explicit choice.
 
 Then:
 
