@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
 import type { Address } from 'viem'
-import { getNetwork } from './chain'
+import { getNetwork, networkKeyForChainId } from './chain'
 import { useSafeInfo } from './lib/hooks'
-import { loadPending, loadTrackedSafes, trackSafe, untrackSafe, upsertPending, type PendingTx, type TrackedSafe } from './lib/storage'
+import { loadPending, loadTrackedSafes, mergePending, trackSafe, untrackSafe, upsertPending, type PendingTx, type TrackedSafe } from './lib/storage'
+import { clearShareFromLocation, readShareFromLocation } from './lib/share'
 import { useWallet } from './lib/wallet'
 import { ConnectBar } from './components/ConnectBar'
 import { ContractsPanel } from './components/ContractsPanel'
@@ -20,6 +21,7 @@ export default function App() {
   const [safe, setSafe] = useState<Address | null>(null)
   const [trackedSafes, setTrackedSafes] = useState<TrackedSafe[]>(() => loadTrackedSafes())
   const [pending, setPending] = useState<PendingTx[]>(() => loadPending())
+  const [shared, setShared] = useState<PendingTx[] | null>(() => readShareFromLocation())
 
   const { info, error: infoError, refresh: refreshInfo, loading: infoLoading } = useSafeInfo(wallet.publicClient, safe)
 
@@ -40,6 +42,23 @@ export default function App() {
   const handleForget = useCallback(() => {
     setSafe(null)
     setTab('safe')
+  }, [])
+
+  const importShared = useCallback(() => {
+    if (!shared || shared.length === 0) return
+    const target = networkKeyForChainId(shared[0].chainId)
+    if (target && target !== wallet.networkKey) wallet.setNetworkKey(target)
+    setPending(mergePending(shared))
+    setSafe(shared[0].safe)
+    setTrackedSafes(trackSafe({ address: shared[0].safe, chainId: shared[0].chainId, addedAt: Date.now() }))
+    setTab('queue')
+    clearShareFromLocation()
+    setShared(null)
+  }, [shared, wallet])
+
+  const dismissShared = useCallback(() => {
+    clearShareFromLocation()
+    setShared(null)
   }, [])
 
   const safePending = pending.filter(
@@ -71,6 +90,27 @@ export default function App() {
               <button className="btn small" onClick={() => void wallet.switchNetwork()}>
                 Switch network
               </button>
+            </div>
+          </Notice>
+        </div>
+      )}
+
+      {shared && shared.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <Notice kind="info">
+            <div className="row between">
+              <span>
+                {shared.length} shared transaction{shared.length === 1 ? '' : 's'} found in this link
+                {shared[0].chainId !== wallet.chainId ? ` (created on chain ${shared[0].chainId})` : ''}.
+              </span>
+              <div className="row">
+                <button className="btn small primary" onClick={importShared}>
+                  Import to queue
+                </button>
+                <button className="btn small ghost" onClick={dismissShared}>
+                  Dismiss
+                </button>
+              </div>
             </div>
           </Notice>
         </div>

@@ -21,11 +21,14 @@ directly to the chain RPC and keeps pending transactions in the browser.
 - **New transaction** — token transfers or raw contract calls; multiple calls
   are batched through `MultiSendCallOnly` (delegatecall).
 - **Off-chain signatures** — owners sign the SafeTx EIP-712 payload in their
-  wallet; signatures are collected locally and can be **exported / imported**
-  as JSON to coordinate between signers.
+  wallet; signatures are collected locally and shared as a **link** or as
+  **JSON**.
+- **On-chain approvals** — owners can instead (or additionally) call
+  `approveHash` on-chain; both kinds count toward the threshold and can be
+  mixed.
 - **Execute** — once the threshold is reached, anyone can submit
   `execTransaction`.
-- **Queue** — pending transactions, signature status, stale-nonce detection.
+- **Queue** — pending transactions, approval status, stale-nonce detection.
 
 ## How the Safe contracts get deployed
 
@@ -76,6 +79,28 @@ Then:
 5. **Queue** tab → collect the remaining signatures (Export / Import to share)
    and *Execute*.
 
+## Coordinating signers (backend-less)
+
+Safe enforces owners and the threshold on-chain, so no server is required — any
+channel that moves a proposed transaction between signers works.
+
+1. **Share link.** The proposer builds and signs a transaction, then clicks
+   *Share link*: the whole proposal (plus any signatures collected so far) is
+   encoded into the URL fragment (`#txs=<base64url>`). Opening the link offers
+   to import it into the queue and (if needed) switches to the right network.
+   *Export JSON* / *Import* carry the same payload as a paste/file.
+
+2. **On-chain approvals.** An owner can instead (or additionally) call
+   `Safe.approveHash(safeTxHash)` from the queue. This is public and needs no
+   hand-off: approvals are read from `approvedHashes` and, at execution time,
+   converted to Safe's pre-approved signature form (`r = owner`, `s = 0`,
+   `v = 1`). Off-chain and on-chain approvals are merged, deduplicated per
+   owner, and counted against the threshold.
+
+A fully-approved transaction is executable by **anyone**, so treat share links
+and exported JSON as sensitive until it is executed. URL fragments can get long
+for MultiSend batches; fall back to JSON if a chat app truncates the link.
+
 ## Verifying the Safe integration
 
 `scripts/verify-safe.ts` deploys the real Safe v1.3.0 contracts to a local
@@ -101,6 +126,7 @@ src/
     abi.ts               minimal Safe / factory / TIP-20 ABIs
     hooks.ts             useSafeInfo / useTokenMeta / useTokenBalance
     storage.ts           localStorage: queued transactions + tracked Safes
+    share.ts             base64url share links for proposals + signatures
     wallet.ts            injected-wallet hook (viem)
   components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard, NewTransaction, Queue
 ```

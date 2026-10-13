@@ -9,12 +9,16 @@ import {
   encodeSafeSetup,
   packMultiSend,
   packSignatures,
+  preApprovedSignature,
   predictSafeAddress,
   recoverSigner,
   safeTxTypedData,
+  serializeTx,
   type SafeCall,
   type SafeTxParams,
 } from '../src/lib/safe'
+import { decodeShare, encodeShare } from '../src/lib/share'
+import type { PendingTx } from '../src/lib/storage'
 
 const RPC = process.env.RPC ?? 'http://127.0.0.1:8545'
 const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
@@ -127,6 +131,35 @@ check(
   owners2[0]!.toLowerCase() === secondOwner.toLowerCase() && owners2[1]!.toLowerCase() === account.address.toLowerCase(),
   owners2.join(', '),
 )
+
+// --- on-chain approval path: approveHash + pre-approved signature ---
+const tx2: SafeTxParams = { ...tx, data: '0x1234', nonce: 2n }
+check('approve tx hash matches on-chain', computeSafeTxHash(31337n, safe, tx2).toLowerCase() === (await readHash(safe, tx2)).toLowerCase())
+const approveHashTx = await wallet.writeContract({ address: safe, abi: safeAbi, functionName: 'approveHash', args: [computeSafeTxHash(31337n, safe, tx2)] })
+await pub.waitForTransactionReceipt({ hash: approveHashTx })
+const approvedValue = await pub.readContract({ address: safe, abi: safeAbi, functionName: 'approvedHashes', args: [account.address, computeSafeTxHash(31337n, safe, tx2)] })
+check('approvedHashes == 1 after approveHash', approvedValue === 1n)
+const preSig = preApprovedSignature(account.address)
+const exec2 = await wallet.writeContract({
+  address: safe,
+  abi: safeAbi,
+  functionName: 'execTransaction',
+  args: [tx2.to, tx2.value, tx2.data, tx2.operation, tx2.safeTxGas, tx2.baseGas, tx2.gasPrice, tx2.gasToken, tx2.refundReceiver, packSignatures([{ owner: account.address, signature: preSig }])],
+})
+check('execTransaction with pre-approved signature succeeded', (await pub.waitForTransactionReceipt({ hash: exec2 })).status === 'success')
+
+// --- share link round-trip ---
+const sample: PendingTx = {
+  id: computeSafeTxHash(31337n, safe, tx2),
+  chainId: 31337,
+  safe,
+  createdAt: Date.now(),
+  label: 'shared',
+  tx: serializeTx(tx2),
+  signatures: { [account.address.toLowerCase()]: preSig },
+}
+const round = decodeShare(encodeShare([sample]))
+check('share encode/decode round-trip', round.length === 1 && round[0]!.id === sample.id && round[0]!.signatures[account.address.toLowerCase()] === preSig)
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

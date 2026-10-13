@@ -33,6 +33,14 @@ export type NetworkKey = keyof typeof NETWORKS
 
 export const NETWORK_KEYS = Object.keys(NETWORKS) as NetworkKey[]
 
+/** The configured network with the given chain id, if any. */
+export function networkKeyForChainId(chainId: number): NetworkKey | null {
+  for (const key of NETWORK_KEYS) {
+    if (NETWORKS[key].chainId === chainId) return key
+  }
+  return null
+}
+
 /** Default network for this UI. */
 export const DEFAULT_NETWORK: NetworkKey = 'testnet'
 

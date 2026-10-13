@@ -5,6 +5,7 @@ import { tip20Abi } from '../lib/abi'
 import {
   buildSafeTx,
   computeSafeTxHash,
+  normalizeSignatureV,
   recoverSigner,
   safeTxTypedData,
   serializeTx,
@@ -114,13 +115,14 @@ export function NewTransaction({
       const safeTx: SafeTxParams = buildSafeTx(calls, info.nonce)
       const hash = computeSafeTxHash(BigInt(wallet.chainId), safe, safeTx)
       const typed = safeTxTypedData(wallet.chainId, safe, safeTx)
-      const signature = await wallet.walletClient.signTypedData({
+      const rawSignature = await wallet.walletClient.signTypedData({
         account: wallet.account,
         domain: typed.domain,
         types: typed.types,
         primaryType: 'SafeTx',
         message: typed.message,
       })
+      const signature = normalizeSignatureV(rawSignature)
       const owner = await recoverSigner(hash, signature)
       if (!info.owners.some((o) => o.toLowerCase() === owner.toLowerCase())) {
         throw new Error(`The signature recovered ${owner}, which is not an owner of this Safe.`)

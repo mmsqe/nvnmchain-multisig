@@ -260,7 +260,16 @@ export function packSignatures(signatures: { owner: Address; signature: Hex }[])
     const bv = BigInt(b.owner)
     return av < bv ? -1 : av > bv ? 1 : 0
   })
-  return concat(sorted.map((s) => normalizeSignatureV(s.signature)))
+  return concat(sorted.map((s) => s.signature))
+}
+
+/**
+ * Safe signature for an owner who approved the hash on-chain via
+ * `approveHash` — encoded as `r = owner`, `s = 0`, `v = 1`. Such signatures
+ * are checked against `approvedHashes` rather than `ecrecover`.
+ */
+export function preApprovedSignature(owner: Address): Hex {
+  return concat([pad(owner, { size: 32 }), ZERO32, '0x01'])
 }
 
 /** Read the deployed Safe suite status. */
