@@ -79,6 +79,35 @@ The interface ships with the NVNM logo (also the favicon) and a light/dark theme
 no stored preference means it tracks `prefers-color-scheme`, and the sun/moon
 button in the header pins an explicit choice.
 
+## Deploy to GitHub Pages
+
+Pushing to `main` runs [`.github/workflows/pages.yml`](.github/workflows/pages.yml),
+which builds the site and publishes it with the official GitHub Pages Actions.
+[`ci.yml`](.github/workflows/ci.yml) type-checks and builds on pull requests.
+
+One-time setup:
+
+1. Push the repo to GitHub (the workflow derives its base path from the repo
+   name, so `/nvnmchain-multisig/` needs no edit).
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+   (The workflow also requests `enablement: true`, which can enable it for you
+   given the `pages: write` permission.)
+
+Your site will be at `https://<owner>.github.io/<repo>/`.
+
+Notes:
+
+- The Vite `base` is derived from `GITHUB_REPOSITORY` (root for `<user>.github.io`
+  repos and custom domains). Set `BASE_PATH=/whatever/` to override.
+- The app is a single page that routes with URL `#` fragments (deep links, share
+  links), so no SPA 404 fallback is needed.
+- To build for Pages locally:
+
+  ```bash
+  GITHUB_REPOSITORY=owner/nvnmchain-multisig npm run build
+  npm run preview
+  ```
+
 Then:
 
 1. Connect an injected wallet (MetaMask / Rabby) and confirm the NVNM network
