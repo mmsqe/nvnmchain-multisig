@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
-import { getNetwork, getNetworkKey, networkKeyForChainId, setNetworkKey as persistNetwork } from './chain'
+import { getNetwork, getNetworkKey, networkKeyForChainId, setNetworkKey as persistNetwork, errorMessage } from './chain'
 import { useSafeInfo } from './lib/hooks'
 import { loadPending, loadTrackedSafes, mergePending, trackSafe, untrackSafe, upsertPending, type PendingTx, type TrackedSafe } from './lib/storage'
-import { clearShareFromLocation, readShareLink } from './lib/share'
+import { clearShareFromLocation, readShareLink, type SignatureShare } from './lib/share'
+import { importSignatureShare } from './lib/coordinate'
 import { useWallet } from './lib/wallet'
 import { ConnectBar } from './components/ConnectBar'
 import { ContractsPanel } from './components/ContractsPanel'
@@ -24,6 +25,8 @@ export default function App() {
   const [trackedSafes, setTrackedSafes] = useState<TrackedSafe[]>(() => loadTrackedSafes())
   const [pending, setPending] = useState<PendingTx[]>(() => loadPending())
   const [shared, setShared] = useState<PendingTx[] | null>(link.txs ?? null)
+  const [sharedSig, setSharedSig] = useState<SignatureShare | null>(link.sig ?? null)
+  const [sigError, setSigError] = useState<string | null>(null)
 
   const { info, error: infoError, refresh: refreshInfo, loading: infoLoading } = useSafeInfo(wallet.publicClient, safe)
 
@@ -73,7 +76,23 @@ export default function App() {
   const dismissShared = useCallback(() => {
     clearShareFromLocation()
     setShared(null)
+    setSharedSig(null)
   }, [])
+
+  const importSharedSig = useCallback(async () => {
+    if (!sharedSig) return
+    setSigError(null)
+    try {
+      const result = await importSignatureShare(wallet.publicClient, sharedSig)
+      setPending(result.list)
+      if (!safe) setSafe(result.safe)
+      setTab('queue')
+      clearShareFromLocation()
+      setSharedSig(null)
+    } catch (e) {
+      setSigError(errorMessage(e))
+    }
+  }, [sharedSig, wallet.publicClient, safe])
 
   const safePending = pending.filter(
     (p) => safe && p.safe.toLowerCase() === safe.toLowerCase() && p.chainId === wallet.chainId,
@@ -126,6 +145,28 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </Notice>
+        </div>
+      )}
+
+      {sharedSig && (
+        <div style={{ marginBottom: 16 }}>
+          <Notice kind="info">
+            <div className="row between">
+              <span>
+                A single signature for <span className="mono-sm">{sharedSig.owner.slice(0, 10)}…</span> was
+                shared — it matches a transaction in your queue.
+              </span>
+              <div className="row">
+                <button className="btn small primary" onClick={() => void importSharedSig()}>
+                  Add signature
+                </button>
+                <button className="btn small ghost" onClick={dismissShared}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+            {sigError && <div style={{ marginTop: 8, color: 'var(--red)' }}>{sigError}</div>}
           </Notice>
         </div>
       )}

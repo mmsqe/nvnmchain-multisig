@@ -26,6 +26,8 @@ directly to the chain RPC and keeps pending transactions in the browser.
 - **On-chain approvals** — owners can instead (or additionally) call
   `approveHash` on-chain; both kinds count toward the threshold and can be
   mixed.
+- **Single-signature sharing** — a signer can send just their signature code
+  out-of-band; the coordinator imports it without exchanging the transaction.
 - **Execute** — once the threshold is reached, anyone can submit
   `execTransaction`.
 - **Queue** — pending transactions, approval status, stale-nonce detection.
@@ -100,6 +102,14 @@ channel that moves a proposed transaction between signers works.
    `v = 1`). Off-chain and on-chain approvals are merged, deduplicated per
    owner, and counted against the threshold.
 
+3. **Single signature (out-of-band).** A signer who has the transaction can
+   click **Copy signature** to get a compact code (base64url of
+   `{id, owner, signature}`) and send *just that* to the coordinator over any
+   channel — no need to exchange the whole transaction. The coordinator pastes
+   it into **Add signature** on the queue (or opens a `#sig=…` link); the app
+   recovers the signer, verifies it is an owner of the Safe, and merges only
+   that approval.
+
 A fully-approved transaction is executable by **anyone**, so treat share links
 and exported JSON as sensitive until it is executed. URL fragments can get long
 for MultiSend batches; fall back to JSON if a chat app truncates the link.
@@ -129,7 +139,8 @@ src/
     abi.ts               minimal Safe / factory / TIP-20 ABIs
     hooks.ts             useSafeInfo / useTokenMeta / useTokenBalance
     storage.ts           localStorage: queued transactions + tracked Safes
-    share.ts             base64url share links for proposals + signatures
+    share.ts             share/signature codes + deep links (base64url)
+    coordinate.ts        import a single out-of-band owner signature
     wallet.ts            injected-wallet hook (viem)
   components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard, NewTransaction, Queue
 ```

@@ -1,11 +1,20 @@
-import { getAddress, isAddress, type Address } from 'viem'
+import { getAddress, isAddress, type Address, type Hex } from 'viem'
 import type { PendingTx } from './storage'
+
+/** A single owner approval, small enough to paste into a chat message. */
+export type SignatureShare = {
+  /** SafeTx hash the signature is over. */
+  id: Hex
+  owner: Address
+  signature: Hex
+}
 
 /** Everything a link can carry: a Safe to open and/or transactions to import. */
 export type ShareLink = {
   safe?: Address
   chainId?: number
   txs?: PendingTx[]
+  sig?: SignatureShare
 }
 
 /** Percent-free base64url of a UTF-8 string. */
@@ -55,6 +64,44 @@ export function decodeShare(encoded: string): PendingTx[] {
   return assertPending(JSON.parse(fromBase64Url(encoded)))
 }
 
+function assertSignatureShare(value: unknown): SignatureShare {
+  const share = value as SignatureShare
+  if (
+    !share ||
+    typeof share !== 'object' ||
+    typeof share.id !== 'string' ||
+    !share.id.startsWith('0x') ||
+    typeof share.owner !== 'string' ||
+    !isAddress(share.owner) ||
+    typeof share.signature !== 'string' ||
+    !share.signature.startsWith('0x')
+  ) {
+    throw new Error('Unrecognised signature')
+  }
+  return { id: share.id as Hex, owner: getAddress(share.owner), signature: share.signature as Hex }
+}
+
+/** Encode a single signature as a compact, paste-friendly code. */
+export function encodeSignatureShare(share: SignatureShare): string {
+  return toBase64Url(JSON.stringify(share))
+}
+
+export function decodeSignatureShare(code: string): SignatureShare {
+  return assertSignatureShare(JSON.parse(fromBase64Url(code)))
+}
+
+/**
+ * Accept anything a signer might send: the bare code, a full URL containing
+ * `#sig=…`, or raw JSON.
+ */
+export function parseSignatureShare(input: string): SignatureShare {
+  const trimmed = input.trim()
+  const fromUrl = trimmed.match(/[#&]sig=([^&\s]+)/)
+  if (fromUrl) return decodeSignatureShare(fromUrl[1])
+  if (trimmed.startsWith('{')) return assertSignatureShare(JSON.parse(trimmed))
+  return decodeSignatureShare(trimmed)
+}
+
 function baseUrl(): string {
   return `${location.origin}${location.pathname}${location.search}`
 }
@@ -77,6 +124,11 @@ export function buildShareUrl(items: PendingTx[]): string {
   return `${baseUrl()}#${params.toString()}`
 }
 
+/** A link that opens a Safe and carries a single signature to import. */
+export function buildSignatureUrl(share: SignatureShare): string {
+  return `${baseUrl()}#sig=${encodeSignatureShare(share)}`
+}
+
 /** Parse the current URL fragment into a {@link ShareLink} (never throws). */
 export function readShareLink(): ShareLink {
   const raw = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash
@@ -94,6 +146,15 @@ export function readShareLink(): ShareLink {
   if (txs) {
     try {
       link.txs = decodeShare(txs)
+    } catch {
+      /* ignore malformed payloads */
+    }
+  }
+
+  const sig = params.get('sig')
+  if (sig) {
+    try {
+      link.sig = decodeSignatureShare(sig)
     } catch {
       /* ignore malformed payloads */
     }

@@ -17,8 +17,27 @@ import {
   type SafeCall,
   type SafeTxParams,
 } from '../src/lib/safe'
-import { buildSafeUrl, buildShareUrl, decodeShare, encodeShare, readShareLink } from '../src/lib/share'
-import type { PendingTx } from '../src/lib/storage'
+import {
+  buildSafeUrl,
+  buildShareUrl,
+  buildSignatureUrl,
+  decodeShare,
+  decodeSignatureShare,
+  encodeShare,
+  encodeSignatureShare,
+  parseSignatureShare,
+  readShareLink,
+} from '../src/lib/share'
+import { importSignatureShare } from '../src/lib/coordinate'
+import { upsertPending, type PendingTx } from '../src/lib/storage'
+
+// localStorage shim so the pending-transaction store works under bun.
+const mem = new Map<string, string>()
+;(globalThis as unknown as { localStorage: unknown }).localStorage = {
+  getItem: (k: string) => mem.get(k) ?? null,
+  setItem: (k: string, v: string) => void mem.set(k, String(v)),
+  removeItem: (k: string) => void mem.delete(k),
+}
 
 const RPC = process.env.RPC ?? 'http://127.0.0.1:8545'
 const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
@@ -170,6 +189,21 @@ check('deep link parses safe + chain', safeLink.safe?.toLowerCase() === account.
 loc.hash = new URL(buildShareUrl([sample])).hash
 const txLink = readShareLink()
 check('deep link parses safe + chain + txs', txLink.safe?.toLowerCase() === safe.toLowerCase() && txLink.chainId === 31337 && txLink.txs?.length === 1 && txLink.txs[0]!.id === sample.id)
+
+// --- single-signature sharing: signer copies just their signature ---
+const tx3: SafeTxParams = { ...tx, data: '0xabcd', nonce: 3n }
+const hash3 = computeSafeTxHash(31337n, safe, tx3)
+const sig3 = await signTx(safe, tx3)
+upsertPending({ id: hash3, chainId: 31337, safe, createdAt: Date.now(), label: 'single sig', tx: serializeTx(tx3), signatures: {} })
+const shareSig = { id: hash3, owner: account.address, signature: sig3 }
+const sigCode = encodeSignatureShare(shareSig)
+check('signature share round-trip', decodeSignatureShare(sigCode).signature === sig3 && parseSignatureShare(buildSignatureUrl(shareSig)).id === hash3)
+const imported = await importSignatureShare(pub, decodeSignatureShare(sigCode))
+check(
+  'importSignatureShare adds the single signature',
+  imported.owner.toLowerCase() === account.address.toLowerCase() &&
+    imported.list.find((p) => p.id === hash3)?.signatures[account.address.toLowerCase()] === sig3,
+)
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

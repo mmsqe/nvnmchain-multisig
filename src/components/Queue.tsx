@@ -11,7 +11,8 @@ import {
   recoverSigner,
   safeTxTypedData,
 } from '../lib/safe'
-import { buildShareUrl } from '../lib/share'
+import { buildShareUrl, encodeSignatureShare, parseSignatureShare } from '../lib/share'
+import { importSignatureShare } from '../lib/coordinate'
 import type { SafeInfo } from '../lib/hooks'
 import { markExecuted, mergePending, mergeSignature, removePending, type PendingTx } from '../lib/storage'
 import type { Wallet } from '../lib/wallet'
@@ -70,6 +71,7 @@ function QueuedTxCard({
 }) {
   const [busy, setBusy] = useState<'sign' | 'approve' | 'execute' | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
+  const [sigCopied, setSigCopied] = useState(false)
   const { approved, refresh: refreshApprovals } = useApprovals(wallet.publicClient, safe, item.id, info.owners)
 
   const tx = deserializeTx(item.tx)
@@ -86,6 +88,7 @@ function QueuedTxCard({
   const iAmOwner = me ? info.owners.some((o) => o.toLowerCase() === me) : false
   const signed = me ? offchain.includes(me) : false
   const approvedByMe = me ? Boolean(approved[me]) : false
+  const mySignature = me ? item.signatures[me] : undefined
   const dataBytes = tx.data === '0x' ? 0 : (tx.data.length - 2) / 2
 
   const run = async (kind: 'sign' | 'approve' | 'execute', fn: () => Promise<void>) => {
@@ -185,6 +188,18 @@ function QueuedTxCard({
     }
   }
 
+  /** Copy just this signer's approval so it can be sent out-of-band. */
+  const copyMySignature = async () => {
+    if (!me || !mySignature) return
+    try {
+      await navigator.clipboard.writeText(encodeSignatureShare({ id: item.id, owner: me as Address, signature: mySignature }))
+      setSigCopied(true)
+      setTimeout(() => setSigCopied(false), 1500)
+    } catch {
+      onError('Clipboard unavailable — copy the code manually.')
+    }
+  }
+
   return (
     <div className="tx-call">
       <div className="row between">
@@ -261,6 +276,11 @@ function QueuedTxCard({
           </span>
         )}
         <div className="spacer" />
+        {mySignature && (
+          <button className="btn small ghost" onClick={copyMySignature} title="Send just your signature to the coordinator">
+            {sigCopied ? 'Signature copied ✓' : 'Copy signature'}
+          </button>
+        )}
         <button className="btn small ghost" onClick={copyShare}>
           {shareCopied ? 'Link copied ✓' : 'Share link'}
         </button>
@@ -298,8 +318,9 @@ export function Queue({
   onChanged: (list: PendingTx[]) => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const [panel, setPanel] = useState<'import' | 'signature' | null>(null)
   const [importText, setImportText] = useState('')
-  const [showImport, setShowImport] = useState(false)
+  const [signatureText, setSignatureText] = useState('')
   const [shareCopied, setShareCopied] = useState(false)
 
   const mine = pending.filter(
@@ -332,9 +353,22 @@ export function Queue({
       const list = Array.isArray(parsed) ? parsed : [parsed]
       onChanged(mergePending(list))
       setImportText('')
-      setShowImport(false)
+      setPanel(null)
     } catch {
       setError('Could not parse the imported JSON.')
+    }
+  }
+
+  /** Add a single out-of-band signature (code or link) to a queued transaction. */
+  const addSignature = async () => {
+    setError(null)
+    try {
+      const result = await importSignatureShare(wallet.publicClient, parseSignatureShare(signatureText))
+      onChanged(result.list)
+      setSignatureText('')
+      setPanel(null)
+    } catch (e) {
+      setError(errorMessage(e))
     }
   }
 
@@ -356,13 +390,20 @@ export function Queue({
           <button className="btn small ghost" onClick={exportAll} disabled={mine.length === 0}>
             Export JSON
           </button>
-          <button className="btn small ghost" onClick={() => setShowImport((v) => !v)}>
-            Import
+          <button className="btn small ghost" onClick={() => setPanel(panel === 'import' ? null : 'import')}>
+            Import tx
+          </button>
+          <button
+            className="btn small ghost"
+            onClick={() => setPanel(panel === 'signature' ? null : 'signature')}
+            title="Paste a signature code from another signer"
+          >
+            Add signature
           </button>
         </div>
       </div>
 
-      {showImport && (
+      {panel === 'import' && (
         <div style={{ marginTop: 14 }}>
           <textarea
             className="mono"
@@ -376,7 +417,28 @@ export function Queue({
             <button className="btn small primary" onClick={doImport} disabled={!importText.trim()}>
               Merge
             </button>
-            <button className="btn small ghost" onClick={() => setShowImport(false)}>
+            <button className="btn small ghost" onClick={() => setPanel(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panel === 'signature' && (
+        <div style={{ marginTop: 14 }}>
+          <input
+            className="mono"
+            value={signatureText}
+            onChange={(e) => setSignatureText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void addSignature()}
+            placeholder="Paste a signature code (or a link containing #sig=…)"
+            spellCheck={false}
+          />
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="btn small primary" onClick={() => void addSignature()} disabled={!signatureText.trim()}>
+              Add signature
+            </button>
+            <button className="btn small ghost" onClick={() => setPanel(null)}>
               Cancel
             </button>
           </div>
