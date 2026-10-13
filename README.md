@@ -1,53 +1,59 @@
 # NVNM Multisig
 
-A **lightweight [Safe](https://safe.global) multisig UI** for **NVNM Chain** — a
-Tempo-compatible L1 (EVM + Tempo transactions), with **no backend**: it talks
-directly to the chain RPC and keeps pending transactions in the browser.
+**A lightweight, backend-less [Safe](https://safe.global) multisig for NVNM Chain** — a Tempo-compatible L1.
 
-- **Network:** NVNM Testnet — chain id `787223`, RPC `https://rpc.nvnm.testnet.nvnmchain.io`
-- **Fee token:** `nUSD` / `pathUSD` (`0x20c0…0000`, TIP-20, 6 decimals). There is
-  no native gas token — the protocol FeeManager charges a TIP-20 and plain
-  EIP-1559 transactions default to the fee token.
-- **Safe version:** v1.3.0 (SafeL2 singleton), deployed at the official **eip155** addresses.
+### ▶ [Open the app](https://yihuang.github.io/nvnmchain-multisig/)
 
-## Features
+A *Safe* is an on-chain account owned by a set of addresses: a transaction executes
+once a **threshold** of those owners approve it. This app creates and manages Safes
+on NVNM Chain.
 
-- **One-time contract setup** — deploys the Safe v1.3.0 singleton, proxy factory,
-  compatibility fallback handler and MultiSendCallOnly at the official **eip155**
-  addresses.
-- **Create a Safe** — owners + threshold + salt nonce; the Safe address is
-  derived and shown *before* deployment.
-- **Load a Safe** — read version, owners, threshold, nonce and balances.
-- **New transaction** — token transfers or raw contract calls; multiple calls
-  are batched through `MultiSendCallOnly` (delegatecall).
-- **Off-chain signatures** — owners sign the SafeTx EIP-712 payload in their
-  wallet; signatures are collected locally and shared as a **link** or as
-  **JSON**.
-- **On-chain approvals** — owners can instead (or additionally) call
-  `approveHash` on-chain; both kinds count toward the threshold and can be
-  mixed.
-- **Single-signature sharing** — a signer can send just their signature code
-  out-of-band; the coordinator imports it without exchanging the transaction.
-- **Execute** — once the threshold is reached, anyone can submit
-  `execTransaction`.
-- **Review before you sign / execute** — an expandable, decoded view of every
-  transaction: target, operation, calldata, pretty-printed TIP-20 transfers and
-  the individual calls of a MultiSend batch (plus a pre-sign **Preview**).
-- **Queue** — pending transactions, approval status, stale-nonce detection.
-- **Light / dark theme** — follows the OS preference by default, with a header
-  toggle that persists the choice (`localStorage`).
+There is no server, no Safe Transaction Service and no indexer — the app talks
+straight to the chain RPC and keeps proposals, approvals and Safes in the browser.
+The multisig rules live in Safe on-chain, so a backend could only ever be a
+bulletin board; this one does without.
 
-## How the Safe contracts get deployed
-
-The chain pre-deploys the deterministic **Safe singleton factory** (a.k.a.
-"SafeDeployer"; calldata = `salt ‖ initcode`):
-
-| Factory | Address |
+| | |
 | --- | --- |
-| Safe singleton factory ("SafeDeployer") | `0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7` |
+| **Network** | NVNM Testnet · chain id `787223` |
+| **RPC** | `https://rpc.nvnm.testnet.nvnmchain.io` |
+| **Fees** | paid in the TIP-20 fee token (`nUSD` on testnet, `pathUSD` on canary) — NVNM has no native gas token |
+| **Safe** | v1.3.0 (SafeL2 singleton) at the official **eip155** addresses |
 
-Safe contracts are deployed **once**, through it with a zero salt, which
-reproduces the official Safe v1.3.0 **"eip155"** addresses:
+## What you can do
+
+- **Set up the Safe contracts** once (singleton, proxy factory, fallback handler, MultiSend).
+- **Create a Safe** from any owners and threshold — the address is derived and shown *before* you deploy.
+- **Load a Safe** by address and see its owners, threshold, nonce and fee-token balance.
+- **Build transactions** — TIP-20 transfers or raw contract calls, batched through MultiSend.
+- **Review before signing or executing** — a decoded view of every call (target, calldata, token amounts, batch contents), plus a pre-sign preview.
+- **Collect approvals without a backend** — off-chain EIP-712 signatures, on-chain `approveHash`, or a single signature sent out-of-band. All three mix and count toward the threshold.
+- **Execute** once the threshold is met — anyone can submit.
+- Light/dark theme that follows your OS.
+
+## Using it
+
+1. Connect an injected wallet (MetaMask, Rabby, …). The app offers to add the NVNM network.
+2. **Contracts** → *Deploy missing contracts* — one-time, a few transactions.
+3. **Create / Load** → create a Safe or open an existing one.
+4. **New transaction** → build a transfer or call, *Preview* it, then sign.
+5. **Queue** → collect the remaining approvals and *Execute*.
+
+## Coordinating signers (no backend)
+
+Any channel that moves a proposed transaction between signers works. The app supports three:
+
+**1. Share link.** After signing, *Share link* encodes the Safe, its chain and the proposal (plus any signatures so far) into the URL fragment — `#safe=0x…&chain=787223&txs=<base64url>`. Opening it switches to the right network, opens the Safe and offers to import. *Copy link* on the dashboard shares a Safe on its own; *Export/Import JSON* does the same via paste or file.
+
+**2. On-chain approvals.** An owner can call `Safe.approveHash(safeTxHash)` from the queue. Nothing needs to be handed back: approvals are read from `approvedHashes` and, at execution time, turned into Safe's pre-approved signature form (`r = owner`, `s = 0`, `v = 1`).
+
+**3. Single signature, out-of-band.** A signer clicks *Copy signature* to get a compact code (base64url of `{id, owner, signature}`) and sends just that to the coordinator, who pastes it into *Add signature* (or opens a `#sig=…` link). The app recovers the signer and verifies they are an owner before merging — no need to exchange the whole transaction.
+
+Off-chain and on-chain approvals are merged and deduplicated per owner, then counted against the threshold. A fully-approved transaction is executable by **anyone**, so treat share links and exported JSON as sensitive until it runs. URL fragments get long for big batches; fall back to JSON if a chat app truncates them.
+
+## Safe contract deployment
+
+NVNM pre-deploys the deterministic **Safe singleton factory** (the "SafeDeployer"; calldata = `salt ‖ initcode`) at `0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7`. Deploying the Safe v1.3.0 bytecode through it with a zero salt reproduces Safe's official **eip155** addresses:
 
 | Contract | Address |
 | --- | --- |
@@ -56,143 +62,52 @@ reproduces the official Safe v1.3.0 **"eip155"** addresses:
 | CompatibilityFallbackHandler | `0x017062a1dE2FE6b99BE3d9d37841FeD19F573804` |
 | MultiSendCallOnly | `0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B` |
 
-The exact creation bytecode from `@gnosis.pm/safe-contracts@1.3.0` is bundled in
-`src/lib/safeArtifacts.ts`; the runtime code hashes match
-`@safe-global/safe-deployments` and every CREATE2 address was re-derived from the
-factory + bytecode.
+The exact `@gnosis.pm/safe-contracts@1.3.0` creation bytecode is bundled in `src/lib/safeArtifacts.ts`; runtime code hashes match `@safe-global/safe-deployments` and each CREATE2 address is re-derived from factory + bytecode. (The same bytecode via the Arachnid factory `0x4e59b448…` lands on Safe's *canonical* set instead; switching is a one-line change in that file.)
 
-> **Note.** The same bytecode deployed through the Arachnid factory
-> (`0x4e59b44847b379578588920cA78FbF26c0B4956C`) instead lands on Safe's
-> **"canonical"** address set (`SafeL2 0x3E5c6364…`, `SafeProxyFactory 0xa6B71E26…`).
-> This app targets the eip155 set; switching is only a matter of changing
-> `CREATE2_FACTORY` + `SAFE_ADDRESSES` in `src/lib/safeArtifacts.ts`.
-
-## Quick start
+## Develop
 
 ```bash
 npm install
 npm run dev      # http://localhost:5174
-npm run build    # production bundle in dist/
+npm run build    # type-check + production bundle in dist/
 ```
 
-The interface ships with the NVNM logo (also the favicon) and a light/dark theme:
-no stored preference means it tracks `prefers-color-scheme`, and the sun/moon
-button in the header pins an explicit choice.
+Push to `main` deploys to GitHub Pages via [`.github/workflows/pages.yml`](.github/workflows/pages.yml); [`ci.yml`](.github/workflows/ci.yml) builds on pull requests. Enable **Settings → Pages → Source: GitHub Actions** once (the workflow can also do it). The base path is derived from the repo name — set `BASE_PATH=/…/` to override.
 
-## Deploy to GitHub Pages
+### Verify the integration
 
-Pushing to `main` runs [`.github/workflows/pages.yml`](.github/workflows/pages.yml),
-which builds the site and publishes it with the official GitHub Pages Actions.
-[`ci.yml`](.github/workflows/ci.yml) type-checks and builds on pull requests.
-
-One-time setup:
-
-1. Push the repo to GitHub (the workflow derives its base path from the repo
-   name, so `/nvnmchain-multisig/` needs no edit).
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-   (The workflow also requests `enablement: true`, which can enable it for you
-   given the `pages: write` permission.)
-
-Your site will be at `https://<owner>.github.io/<repo>/`.
-
-Notes:
-
-- The Vite `base` is derived from `GITHUB_REPOSITORY` (root for `<user>.github.io`
-  repos and custom domains). Set `BASE_PATH=/whatever/` to override.
-- The app is a single page that routes with URL `#` fragments (deep links, share
-  links), so no SPA 404 fallback is needed.
-- To build for Pages locally:
-
-  ```bash
-  GITHUB_REPOSITORY=owner/nvnmchain-multisig npm run build
-  npm run preview
-  ```
-
-Then:
-
-1. Connect an injected wallet (MetaMask / Rabby) and confirm the NVNM network
-   (the UI offers to add it).
-2. **Contracts** tab → *Deploy missing contracts* (one-time, a few transactions
-   paid in the fee token).
-3. **Create / Load** tab → create a Safe, or load an existing address.
-4. **New transaction** tab → build a transfer / call, sign it (EIP-712).
-5. **Queue** tab → collect the remaining signatures (Export / Import to share)
-   and *Execute*.
-
-## Coordinating signers (backend-less)
-
-Safe enforces owners and the threshold on-chain, so no server is required — any
-channel that moves a proposed transaction between signers works.
-
-1. **Share link.** The proposer builds and signs a transaction, then clicks
-   *Share link*: the link carries the Safe address, its chain and the proposal
-   (plus any signatures collected so far) in the URL fragment
-   (`#safe=0x…&chain=787223&txs=<base64url>`). Opening the link **switches to the
-   right network and opens the Safe immediately**, and offers to import the
-   transactions into the queue. The Safe dashboard's *Copy link* button produces
-   the same link without any transactions, so you can hand someone a Safe to
-   open. *Export JSON* / *Import* carry the payload as a paste/file.
-
-2. **On-chain approvals.** An owner can instead (or additionally) call
-   `Safe.approveHash(safeTxHash)` from the queue. This is public and needs no
-   hand-off: approvals are read from `approvedHashes` and, at execution time,
-   converted to Safe's pre-approved signature form (`r = owner`, `s = 0`,
-   `v = 1`). Off-chain and on-chain approvals are merged, deduplicated per
-   owner, and counted against the threshold.
-
-3. **Single signature (out-of-band).** A signer who has the transaction can
-   click **Copy signature** to get a compact code (base64url of
-   `{id, owner, signature}`) and send *just that* to the coordinator over any
-   channel — no need to exchange the whole transaction. The coordinator pastes
-   it into **Add signature** on the queue (or opens a `#sig=…` link); the app
-   recovers the signer, verifies it is an owner of the Safe, and merges only
-   that approval.
-
-A fully-approved transaction is executable by **anyone**, so treat share links
-and exported JSON as sensitive until it is executed. URL fragments can get long
-for MultiSend batches; fall back to JSON if a chat app truncates the link.
-
-## Verifying the Safe integration
-
-`scripts/verify-safe.ts` deploys the real Safe v1.3.0 contracts to a local
-[anvil](https://book.getfoundry.sh/anvil/) node and checks the whole pipeline:
-address prediction, owner sorting, EIP-712 hashing, signature recovery,
-`execTransaction` and a MultiSend batch executed through the Safe.
+`scripts/verify-safe.ts` deploys the real Safe v1.3.0 contracts to a local [anvil](https://book.getfoundry.sh/anvil/) node and exercises the whole pipeline: address prediction, owner sorting, EIP-712 hashing, signature recovery, `execTransaction`, MultiSend and single-signature import.
 
 ```bash
 anvil --port 8546 &
 RPC=http://127.0.0.1:8546 npm run verify:safe   # requires bun
 ```
 
-Expected output ends with `ALL CHECKS PASSED`.
+Output ends with `ALL CHECKS PASSED`.
 
 ## Project layout
 
 ```
 src/
-  chain.ts               network config, formatting, explorer links
+  chain.ts               network config, explorer links, formatting
   lib/
     safeArtifacts.ts     eip155 addresses + v1.3.0 creation bytecode (generated)
-    safe.ts              setup encoding, address prediction, SafeTx hash, sig packing, MultiSend
-    decode.ts            decode calldata + unpack MultiSend batches for review
-    abi.ts               minimal Safe / factory / TIP-20 ABIs
-    hooks.ts             useSafeInfo / useTokenMeta / useTokenBalance
-    storage.ts           localStorage: queued transactions + tracked Safes
-    share.ts             share/signature codes + deep links (base64url)
+    safe.ts              setup encoding, address prediction, SafeTx hash, sig packing
+    decode.ts            calldata decoding + MultiSend unpacking for the review view
+    share.ts             share links, signature codes, deep links
     coordinate.ts        import a single out-of-band owner signature
-    wallet.ts            injected-wallet hook (viem)
+    storage.ts           localStorage: queued transactions + tracked Safes
+    abi.ts, hooks.ts, wallet.ts, theme.ts
   components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard,
                          NewTransaction, TransactionReview, Queue
 ```
 
-## Security notes
+## Security
 
-- **Testnet software.** Not audited; use at your own risk.
-- Signatures are collected **off-chain** and stored in this browser's
-  `localStorage`. Treat exported signature JSON as sensitive until the
-  transaction is executed (a signed SafeTx can be executed by anyone once the
-  threshold is met).
+- **Testnet software, unaudited.** Use at your own risk.
+- Signatures are collected off-chain and stored in this browser's `localStorage`.
+  A threshold-signed transaction can be executed by anyone, so treat exported
+  signatures and share links as sensitive until it runs.
 - A queued transaction is only executable while the Safe's nonce still matches;
-  the Queue flags stale nonces.
-- Always verify the Safe address, target, value and calldata in your wallet
-  before signing.
+  the queue flags stale nonces.
+- Always verify the Safe address, target and calldata in your wallet before signing.
