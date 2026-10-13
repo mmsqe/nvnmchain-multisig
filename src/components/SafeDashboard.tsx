@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import type { Address } from 'viem'
 import { FEE_TOKEN, feeTokenSymbol, formatUnits, shortAddress } from '../chain'
 import { useNativeBalance, useTokenBalance, type SafeInfo } from '../lib/hooks'
+import { buildSafeUrl } from '../lib/share'
 import type { Wallet } from '../lib/wallet'
 import { AddressLink, CopyButton, Stat } from './ui'
 
@@ -25,6 +27,7 @@ export function SafeDashboard({
 }) {
   const { balance: feeBalance } = useTokenBalance(wallet.publicClient, FEE_TOKEN, safe)
   const { balance: nativeBalance } = useNativeBalance(wallet.publicClient, safe)
+  const [linkCopied, setLinkCopied] = useState(false)
   const me = wallet.account?.toLowerCase()
   const iAmOwner = Boolean(me && info.owners.some((o) => o.toLowerCase() === me))
   const thresholdNum = Number(info.threshold)
@@ -45,6 +48,21 @@ export function SafeDashboard({
           ) : (
             <span className="badge">not an owner</span>
           )}
+          <button
+            className="btn small ghost"
+            title="Copy a link that opens this Safe"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(buildSafeUrl(safe, wallet.chainId))
+                setLinkCopied(true)
+                setTimeout(() => setLinkCopied(false), 1500)
+              } catch {
+                /* clipboard unavailable */
+              }
+            }}
+          >
+            {linkCopied ? 'Link copied ✓' : 'Copy link'}
+          </button>
           <button className="btn small ghost" onClick={onRefresh} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>

@@ -85,10 +85,13 @@ Safe enforces owners and the threshold on-chain, so no server is required — an
 channel that moves a proposed transaction between signers works.
 
 1. **Share link.** The proposer builds and signs a transaction, then clicks
-   *Share link*: the whole proposal (plus any signatures collected so far) is
-   encoded into the URL fragment (`#txs=<base64url>`). Opening the link offers
-   to import it into the queue and (if needed) switches to the right network.
-   *Export JSON* / *Import* carry the same payload as a paste/file.
+   *Share link*: the link carries the Safe address, its chain and the proposal
+   (plus any signatures collected so far) in the URL fragment
+   (`#safe=0x…&chain=787223&txs=<base64url>`). Opening the link **switches to the
+   right network and opens the Safe immediately**, and offers to import the
+   transactions into the queue. The Safe dashboard's *Copy link* button produces
+   the same link without any transactions, so you can hand someone a Safe to
+   open. *Export JSON* / *Import* carry the payload as a paste/file.
 
 2. **On-chain approvals.** An owner can instead (or additionally) call
    `Safe.approveHash(safeTxHash)` from the queue. This is public and needs no

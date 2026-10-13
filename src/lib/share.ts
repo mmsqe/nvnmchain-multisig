@@ -1,4 +1,12 @@
+import { getAddress, isAddress, type Address } from 'viem'
 import type { PendingTx } from './storage'
+
+/** Everything a link can carry: a Safe to open and/or transactions to import. */
+export type ShareLink = {
+  safe?: Address
+  chainId?: number
+  txs?: PendingTx[]
+}
 
 /** Percent-free base64url of a UTF-8 string. */
 function toBase64Url(value: string): string {
@@ -47,27 +55,60 @@ export function decodeShare(encoded: string): PendingTx[] {
   return assertPending(JSON.parse(fromBase64Url(encoded)))
 }
 
-/** A link that carries the given pending transactions in the URL fragment. */
+function baseUrl(): string {
+  return `${location.origin}${location.pathname}${location.search}`
+}
+
+/** A link that opens a Safe by address. */
+export function buildSafeUrl(address: Address, chainId: number): string {
+  const params = new URLSearchParams()
+  params.set('safe', getAddress(address))
+  params.set('chain', String(chainId))
+  return `${baseUrl()}#${params.toString()}`
+}
+
+/** A link that opens a Safe and carries transactions/signatures to import. */
 export function buildShareUrl(items: PendingTx[]): string {
-  const base = `${location.origin}${location.pathname}${location.search}`
-  return `${base}#txs=${encodeShare(items)}`
+  if (items.length === 0) return baseUrl()
+  const params = new URLSearchParams()
+  params.set('safe', items[0].safe)
+  params.set('chain', String(items[0].chainId))
+  params.set('txs', encodeShare(items))
+  return `${baseUrl()}#${params.toString()}`
 }
 
-/** Read a shared payload from the current URL fragment, if present and valid. */
-export function readShareFromLocation(): PendingTx[] | null {
-  const match = location.hash.match(/[#&]txs=([^&]+)/)
-  if (!match) return null
-  try {
-    return decodeShare(match[1])
-  } catch {
-    return null
+/** Parse the current URL fragment into a {@link ShareLink} (never throws). */
+export function readShareLink(): ShareLink {
+  const raw = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash
+  if (!raw) return {}
+  const params = new URLSearchParams(raw)
+  const link: ShareLink = {}
+
+  const safe = params.get('safe')
+  if (safe && isAddress(safe)) link.safe = getAddress(safe)
+
+  const chain = params.get('chain')
+  if (chain && /^\d+$/.test(chain)) link.chainId = Number(chain)
+
+  const txs = params.get('txs')
+  if (txs) {
+    try {
+      link.txs = decodeShare(txs)
+    } catch {
+      /* ignore malformed payloads */
+    }
   }
+
+  // Fall back to the address/chain carried inside the transaction payload.
+  if (!link.safe && link.txs?.[0]) link.safe = link.txs[0].safe
+  if (!link.chainId && link.txs?.[0]) link.chainId = link.txs[0].chainId
+  return link
 }
 
-/** Drop the share fragment from the address bar (keeps history clean). */
+/** Drop the link fragment from the address bar (keeps history clean). */
 export function clearShareFromLocation(): void {
   try {
-    history.replaceState(null, '', `${location.origin}${location.pathname}${location.search}`)
+    history.replaceState(null, '', baseUrl())
   } catch {
     /* ignore */
   }

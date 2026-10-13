@@ -1,9 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
-import { getNetwork, networkKeyForChainId } from './chain'
+import { getNetwork, getNetworkKey, networkKeyForChainId, setNetworkKey as persistNetwork } from './chain'
 import { useSafeInfo } from './lib/hooks'
 import { loadPending, loadTrackedSafes, mergePending, trackSafe, untrackSafe, upsertPending, type PendingTx, type TrackedSafe } from './lib/storage'
-import { clearShareFromLocation, readShareFromLocation } from './lib/share'
+import { clearShareFromLocation, readShareLink } from './lib/share'
 import { useWallet } from './lib/wallet'
 import { ConnectBar } from './components/ConnectBar'
 import { ContractsPanel } from './components/ContractsPanel'
@@ -17,13 +17,30 @@ type Tab = 'safe' | 'new' | 'queue' | 'contracts'
 
 export default function App() {
   const wallet = useWallet()
-  const [tab, setTab] = useState<Tab>('safe')
-  const [safe, setSafe] = useState<Address | null>(null)
+  // Parsed once from the URL fragment (a deep link can open a Safe and carry txs).
+  const [link] = useState(() => readShareLink())
+  const [tab, setTab] = useState<Tab>(link.txs?.length ? 'queue' : 'safe')
+  const [safe, setSafe] = useState<Address | null>(link.safe ?? null)
   const [trackedSafes, setTrackedSafes] = useState<TrackedSafe[]>(() => loadTrackedSafes())
   const [pending, setPending] = useState<PendingTx[]>(() => loadPending())
-  const [shared, setShared] = useState<PendingTx[] | null>(() => readShareFromLocation())
+  const [shared, setShared] = useState<PendingTx[] | null>(link.txs ?? null)
 
   const { info, error: infoError, refresh: refreshInfo, loading: infoLoading } = useSafeInfo(wallet.publicClient, safe)
+
+  const linkChainKey = link.chainId ? networkKeyForChainId(link.chainId) : null
+  const switchingNetwork = Boolean(linkChainKey && linkChainKey !== wallet.networkKey)
+
+  // Apply the deep link once: switch to the linked network, remember and open the Safe.
+  useEffect(() => {
+    if (link.chainId) {
+      const key = networkKeyForChainId(link.chainId)
+      if (key && key !== getNetworkKey()) persistNetwork(key)
+    }
+    if (link.safe) {
+      setTrackedSafes(trackSafe({ address: link.safe, chainId: link.chainId ?? getNetwork().chainId, addedAt: Date.now() }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLoad = useCallback(
     (address: Address) => {
@@ -46,15 +63,12 @@ export default function App() {
 
   const importShared = useCallback(() => {
     if (!shared || shared.length === 0) return
-    const target = networkKeyForChainId(shared[0].chainId)
-    if (target && target !== wallet.networkKey) wallet.setNetworkKey(target)
     setPending(mergePending(shared))
-    setSafe(shared[0].safe)
-    setTrackedSafes(trackSafe({ address: shared[0].safe, chainId: shared[0].chainId, addedAt: Date.now() }))
+    if (!safe) setSafe(shared[0].safe)
     setTab('queue')
     clearShareFromLocation()
     setShared(null)
-  }, [shared, wallet])
+  }, [shared, safe])
 
   const dismissShared = useCallback(() => {
     clearShareFromLocation()
@@ -100,8 +114,8 @@ export default function App() {
           <Notice kind="info">
             <div className="row between">
               <span>
-                {shared.length} shared transaction{shared.length === 1 ? '' : 's'} found in this link
-                {shared[0].chainId !== wallet.chainId ? ` (created on chain ${shared[0].chainId})` : ''}.
+                {shared.length} shared transaction{shared.length === 1 ? '' : 's'} in this link
+                {safe ? ' — the Safe is open below.' : '.'}
               </span>
               <div className="row">
                 <button className="btn small primary" onClick={importShared}>
@@ -126,7 +140,7 @@ export default function App() {
           <ul className="muted small" style={{ lineHeight: 1.9, paddingLeft: 18 }}>
             <li>One-time deterministic deployment of Safe v1.3.0 at the official eip155 addresses.</li>
             <li>Create or load a Safe; the address is known before deployment.</li>
-            <li>Off-chain EIP-712 signatures collected in the browser (export/import to share).</li>
+            <li>Off-chain EIP-712 signatures or on-chain approvals, shared by link or JSON.</li>
             <li>No backend, no transaction service — everything runs against the RPC.</li>
           </ul>
           <div className="row" style={{ marginTop: 12 }}>
@@ -153,7 +167,7 @@ export default function App() {
             ))}
           </nav>
 
-          {infoError && (
+          {infoError && !switchingNetwork && (
             <div style={{ marginBottom: 16 }}>
               <Notice kind="err">{infoError}</Notice>
             </div>

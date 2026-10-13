@@ -17,7 +17,7 @@ import {
   type SafeCall,
   type SafeTxParams,
 } from '../src/lib/safe'
-import { decodeShare, encodeShare } from '../src/lib/share'
+import { buildSafeUrl, buildShareUrl, decodeShare, encodeShare, readShareLink } from '../src/lib/share'
 import type { PendingTx } from '../src/lib/storage'
 
 const RPC = process.env.RPC ?? 'http://127.0.0.1:8545'
@@ -160,6 +160,16 @@ const sample: PendingTx = {
 }
 const round = decodeShare(encodeShare([sample]))
 check('share encode/decode round-trip', round.length === 1 && round[0]!.id === sample.id && round[0]!.signatures[account.address.toLowerCase()] === preSig)
+
+// --- deep link: carries the Safe address (and chain), loads it immediately ---
+;(globalThis as unknown as { location: unknown }).location = { hash: '', origin: 'https://app.example', pathname: '/', search: '' }
+const loc = (globalThis as unknown as { location: { hash: string } }).location
+loc.hash = new URL(buildSafeUrl(account.address, 31337)).hash
+const safeLink = readShareLink()
+check('deep link parses safe + chain', safeLink.safe?.toLowerCase() === account.address.toLowerCase() && safeLink.chainId === 31337 && safeLink.txs === undefined)
+loc.hash = new URL(buildShareUrl([sample])).hash
+const txLink = readShareLink()
+check('deep link parses safe + chain + txs', txLink.safe?.toLowerCase() === safe.toLowerCase() && txLink.chainId === 31337 && txLink.txs?.length === 1 && txLink.txs[0]!.id === sample.id)
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)
