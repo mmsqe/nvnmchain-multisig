@@ -1,5 +1,5 @@
 /* End-to-end verification against real Safe v1.3.0 contracts on anvil. */
-import { createPublicClient, createWalletClient, http, hashTypedData, encodeFunctionData } from 'viem'
+import { createPublicClient, createWalletClient, http, hashTypedData, encodeFunctionData, parseAbi } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { multiSendCallOnlyAbi, safeAbi, safeProxyFactoryAbi } from '../src/lib/abi'
 import { SAFE_ADDRESSES, SAFE_CREATION_CODE } from '../src/lib/safeArtifacts'
@@ -29,6 +29,7 @@ import {
   readShareLink,
 } from '../src/lib/share'
 import { importSignatureShare } from '../src/lib/coordinate'
+import { decodeCall, decodeMultiSend, isMultiSendCall } from '../src/lib/decode'
 import { upsertPending, type PendingTx } from '../src/lib/storage'
 
 // localStorage shim so the pending-transaction store works under bun.
@@ -134,6 +135,20 @@ check('batch targets MultiSendCallOnly + delegatecall', batchTx.to.toLowerCase()
 check('batch calldata == multiSend(packMultiSend)', batchTx.data.toLowerCase() === encodeFunctionData({ abi: multiSendCallOnlyAbi, functionName: 'multiSend', args: [packMultiSend(calls)] }).toLowerCase())
 check('batch SafeTx hash matches on-chain', computeSafeTxHash(31337n, safe, batchTx).toLowerCase() === (await readHash(safe, batchTx)).toLowerCase())
 check('batch MultiSend execution succeeded', (await exec(safe, batchTx, await signTx(safe, batchTx))) === 'success')
+
+// --- transaction review decoding ---
+const transferAbi = parseAbi(['function transfer(address to, uint256 amount)'])
+const transferData = encodeFunctionData({ abi: transferAbi, functionName: 'transfer', args: [account.address, 1234567n] })
+const decoded = decodeCall(transferData) as { name: string | null; args: readonly unknown[] }
+check('decodeCall recognises transfer', decoded.name === 'transfer' && (decoded.args[0] as string).toLowerCase() === account.address.toLowerCase() && decoded.args[1] === 1234567n)
+const unpacked = decodeMultiSend(batchTx.data)
+check(
+  'decodeMultiSend round-trips the batch',
+  unpacked.length === 2 &&
+    unpacked[0]!.to.toLowerCase() === calls[0]!.to.toLowerCase() &&
+    unpacked[1]!.data === calls[1]!.data &&
+    isMultiSendCall(batchTx, SAFE_ADDRESSES.multiSendCallOnly),
+)
 
 // --- owner sorting: pass owners in descending order, expect ascending on-chain ---
 const secondOwner = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as const

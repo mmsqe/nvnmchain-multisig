@@ -16,6 +16,7 @@ import { useTokenMeta, type SafeInfo } from '../lib/hooks'
 import type { PendingTx } from '../lib/storage'
 import type { Wallet } from '../lib/wallet'
 import { Field, Notice } from './ui'
+import { TransactionReview } from './TransactionReview'
 
 type Draft = {
   id: string
@@ -64,11 +65,34 @@ export function NewTransaction({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Hex | null>(null)
+  const [preview, setPreview] = useState<SafeTxParams | null>(null)
 
-  const update = (id: string, patch: Partial<Draft>) =>
+  const update = (id: string, patch: Partial<Draft>) => {
+    setPreview(null)
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)))
-  const add = () => setDrafts((ds) => [...ds, blank()])
-  const remove = (id: string) => setDrafts((ds) => (ds.length === 1 ? ds : ds.filter((d) => d.id !== id)))
+  }
+  const add = () => {
+    setPreview(null)
+    setDrafts((ds) => [...ds, blank()])
+  }
+  const remove = (id: string) => {
+    setPreview(null)
+    setDrafts((ds) => (ds.length === 1 ? ds : ds.filter((d) => d.id !== id)))
+  }
+
+  const buildPreview = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const calls: SafeCall[] = []
+      for (const d of drafts) calls.push(await encodeDraft(d))
+      setPreview(buildSafeTx(calls, info.nonce))
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const encodeDraft = async (d: Draft): Promise<SafeCall> => {
     if (d.kind === 'transfer') {
@@ -136,6 +160,7 @@ export function NewTransaction({
       })
       setDone(hash)
       setDrafts([blank()])
+      setPreview(null)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -269,8 +294,13 @@ export function NewTransaction({
         <button className="btn primary" onClick={sign} disabled={busy || !wallet.account}>
           {busy ? 'Waiting for signature…' : 'Sign & queue'}
         </button>
+        <button className="btn ghost" onClick={() => void buildPreview()} disabled={busy}>
+          Preview
+        </button>
         {!wallet.account && <span className="muted small">Connect a wallet to sign.</span>}
       </div>
+
+      {preview && <TransactionReview publicClient={wallet.publicClient} tx={preview} />}
     </section>
   )
 }

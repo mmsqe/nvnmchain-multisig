@@ -17,6 +17,7 @@ import type { SafeInfo } from '../lib/hooks'
 import { markExecuted, mergePending, mergeSignature, removePending, type PendingTx } from '../lib/storage'
 import type { Wallet } from '../lib/wallet'
 import { Notice, TxLink } from './ui'
+import { TransactionReview } from './TransactionReview'
 
 /** On-chain `approveHash` status for every owner of a Safe. */
 function useApprovals(publicClient: PublicClient, safe: Address, hash: Hex, owners: Address[]) {
@@ -72,6 +73,7 @@ function QueuedTxCard({
   const [busy, setBusy] = useState<'sign' | 'approve' | 'execute' | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
   const [sigCopied, setSigCopied] = useState(false)
+  const [showReview, setShowReview] = useState(false)
   const { approved, refresh: refreshApprovals } = useApprovals(wallet.publicClient, safe, item.id, info.owners)
 
   const tx = deserializeTx(item.tx)
@@ -276,6 +278,9 @@ function QueuedTxCard({
           </span>
         )}
         <div className="spacer" />
+        <button className="btn small ghost" onClick={() => setShowReview((v) => !v)} aria-expanded={showReview}>
+          {showReview ? 'Hide details' : 'Review'}
+        </button>
         {mySignature && (
           <button className="btn small ghost" onClick={copyMySignature} title="Send just your signature to the coordinator">
             {sigCopied ? 'Signature copied ✓' : 'Copy signature'}
@@ -300,6 +305,8 @@ function QueuedTxCard({
           Remove
         </button>
       </div>
+
+      {showReview && <TransactionReview publicClient={wallet.publicClient} tx={tx} />}
     </div>
   )
 }

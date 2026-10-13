@@ -30,6 +30,9 @@ directly to the chain RPC and keeps pending transactions in the browser.
   out-of-band; the coordinator imports it without exchanging the transaction.
 - **Execute** — once the threshold is reached, anyone can submit
   `execTransaction`.
+- **Review before you sign / execute** — an expandable, decoded view of every
+  transaction: target, operation, calldata, pretty-printed TIP-20 transfers and
+  the individual calls of a MultiSend batch (plus a pre-sign **Preview**).
 - **Queue** — pending transactions, approval status, stale-nonce detection.
 - **Light / dark theme** — follows the OS preference by default, with a header
   toggle that persists the choice (`localStorage`).
@@ -142,13 +145,15 @@ src/
   lib/
     safeArtifacts.ts     eip155 addresses + v1.3.0 creation bytecode (generated)
     safe.ts              setup encoding, address prediction, SafeTx hash, sig packing, MultiSend
+    decode.ts            decode calldata + unpack MultiSend batches for review
     abi.ts               minimal Safe / factory / TIP-20 ABIs
     hooks.ts             useSafeInfo / useTokenMeta / useTokenBalance
     storage.ts           localStorage: queued transactions + tracked Safes
     share.ts             share/signature codes + deep links (base64url)
     coordinate.ts        import a single out-of-band owner signature
     wallet.ts            injected-wallet hook (viem)
-  components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard, NewTransaction, Queue
+  components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard,
+                         NewTransaction, TransactionReview, Queue
 ```
 
 ## Security notes

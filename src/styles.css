@@ -469,6 +469,33 @@ label.lbl {
 .tx-call + .tx-call {
   margin-top: 10px;
 }
+
+/* ---------- transaction review ---------- */
+.review {
+  margin-top: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+.review .tx-call {
+  background: var(--card);
+}
+.review details > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.review details > summary::-webkit-details-marker {
+  display: none;
+}
+.review details > summary::before {
+  content: '▸ ';
+}
+.review details[open] > summary::before {
+  content: '▾ ';
+}
+.review details > summary:hover {
+  color: var(--text);
+}
 .seg {
   display: inline-flex;
   border: 1px solid var(--border);
