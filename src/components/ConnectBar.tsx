@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NETWORKS, NETWORK_KEYS, getNetwork, shortAddress, type NetworkKey } from '../chain'
 import { useTokenBalance } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
@@ -5,9 +6,41 @@ import type { Wallet } from '../lib/wallet'
 import { FEE_TOKEN, feeTokenSymbol, formatUnits } from '../chain'
 import { MoonIcon, SunIcon } from './ui'
 
+function AccountChip({ wallet }: { wallet: Wallet }) {
+  const { balance } = useTokenBalance(wallet.publicClient, FEE_TOKEN, wallet.account)
+  const [copied, setCopied] = useState(false)
+  const account = wallet.account
+
+  if (!account) return null
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(account)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  return (
+    <div className="account-chip">
+      <span className="dot ok" />
+      <button className="account-address" onClick={copy} title={copied ? 'Copied' : `Copy ${account}`}>
+        <span className="mono">{shortAddress(account, 5)}</span>
+        <span className="copy-icon">{copied ? '✓' : '⧉'}</span>
+      </button>
+      {balance != null && (
+        <span className="muted small">
+          {formatUnits(balance)} {feeTokenSymbol()}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function ConnectBar({ wallet }: { wallet: Wallet }) {
   const net = getNetwork()
-  const { balance } = useTokenBalance(wallet.publicClient, FEE_TOKEN, wallet.account)
   const { theme, toggle } = useTheme()
 
   return (
@@ -42,13 +75,12 @@ export function ConnectBar({ wallet }: { wallet: Wallet }) {
           ))}
         </select>
         {wallet.account ? (
-          <button className="btn ghost" onClick={wallet.disconnect} title="Disconnect">
-            <span className="dot ok" />
-            <span className="mono">{shortAddress(wallet.account, 5)}</span>
-            <span className="muted small">
-              {balance == null ? '' : `${formatUnits(balance)} ${feeTokenSymbol()}`}
-            </span>
-          </button>
+          <>
+            <AccountChip wallet={wallet} />
+            <button className="btn ghost small" onClick={wallet.disconnect} title="Disconnect wallet">
+              Disconnect
+            </button>
+          </>
         ) : (
           <button className="btn primary" onClick={wallet.connect} disabled={wallet.connecting}>
             {wallet.connecting ? 'Connecting…' : 'Connect wallet'}

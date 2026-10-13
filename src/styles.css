@@ -125,6 +125,38 @@ code,
   gap: 10px;
   flex-wrap: wrap;
 }
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-soft);
+}
+.account-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--mono);
+}
+.account-address:hover {
+  background: var(--card-hover);
+}
+.account-address .copy-icon {
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-address:hover .copy-icon {
+  color: var(--accent);
+}
 
 /* ---------- buttons / inputs ---------- */
 .btn {
