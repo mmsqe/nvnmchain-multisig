@@ -1,17 +1,12 @@
 import { useState } from 'react'
+import type { Address } from 'viem'
 import { NETWORKS, NETWORK_KEYS, getNetwork, shortAddress, type NetworkKey } from '../chain'
-import { useTokenBalance } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
 import type { Wallet } from '../lib/wallet'
-import { FEE_TOKEN, feeTokenSymbol, formatUnits } from '../chain'
 import { MoonIcon, SunIcon } from './ui'
 
-function AccountChip({ wallet }: { wallet: Wallet }) {
-  const { balance } = useTokenBalance(wallet.publicClient, FEE_TOKEN, wallet.account)
+function AccountChip({ account }: { account: Address }) {
   const [copied, setCopied] = useState(false)
-  const account = wallet.account
-
-  if (!account) return null
 
   const copy = async () => {
     try {
@@ -30,11 +25,6 @@ function AccountChip({ wallet }: { wallet: Wallet }) {
         <span className="mono">{shortAddress(account, 5)}</span>
         <span className="copy-icon">{copied ? '✓' : '⧉'}</span>
       </button>
-      {balance != null && (
-        <span className="muted small">
-          {formatUnits(balance)} {feeTokenSymbol()}
-        </span>
-      )}
     </div>
   )
 }
@@ -76,7 +66,7 @@ export function ConnectBar({ wallet }: { wallet: Wallet }) {
         </select>
         {wallet.account ? (
           <>
-            <AccountChip wallet={wallet} />
+            <AccountChip account={wallet.account} />
             <button className="btn ghost small" onClick={wallet.disconnect} title="Disconnect wallet">
               Disconnect
             </button>
