@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Address } from 'viem'
 import { FEE_TOKEN, feeTokenSymbol, formatUnits, shortAddress } from '../chain'
-import { useNativeBalance, useTokenBalance, type SafeInfo } from '../lib/hooks'
+import { useTokenBalance, type SafeInfo } from '../lib/hooks'
 import { buildSafeUrl } from '../lib/share'
 import type { Wallet } from '../lib/wallet'
 import { AddressLink, CopyButton, Stat } from './ui'
@@ -26,7 +26,6 @@ export function SafeDashboard({
   loading?: boolean
 }) {
   const { balance: feeBalance } = useTokenBalance(wallet.publicClient, FEE_TOKEN, safe)
-  const { balance: nativeBalance } = useNativeBalance(wallet.publicClient, safe)
   const [linkCopied, setLinkCopied] = useState(false)
   const me = wallet.account?.toLowerCase()
   const iAmOwner = Boolean(me && info.owners.some((o) => o.toLowerCase() === me))
@@ -82,11 +81,6 @@ export function SafeDashboard({
         <div className="stack">
           <Stat label={`${feeTokenSymbol()} balance (fee token)`}>
             <span className="mono">{formatUnits(feeBalance)}</span>
-          </Stat>
-          <Stat label="Native placeholder">
-            <span className="mono-sm muted" title="Tempo has no native gas token">
-              {nativeBalance == null ? '—' : formatUnits(nativeBalance, 18)}
-            </span>
           </Stat>
           <Stat label="Queued transactions">
             {pendingCount > 0 ? <span className="badge info">{pendingCount} pending</span> : <span className="muted">none</span>}

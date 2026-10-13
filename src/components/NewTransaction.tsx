@@ -24,7 +24,6 @@ type Draft = {
   recipient: string
   amount: string
   to: string
-  value: string
   data: string
 }
 
@@ -37,7 +36,6 @@ const blank = (): Draft => ({
   recipient: '',
   amount: '',
   to: '',
-  value: '0',
   data: '0x',
 })
 
@@ -90,7 +88,7 @@ export function NewTransaction({
     if (!isAddress(d.to)) throw new Error('Invalid target address.')
     return {
       to: getAddress(d.to),
-      value: BigInt(d.value.trim() || '0'),
+      value: 0n,
       data: (d.data.trim() || '0x') as Hex,
     }
   }
@@ -236,26 +234,16 @@ export function NewTransaction({
                   disabled={busy}
                 />
               </Field>
-              <div className="grid2" style={{ marginTop: 4 }}>
-                <Field label="Value (wei, usually 0)">
-                  <input
-                    className="mono"
-                    value={draft.value}
-                    onChange={(e) => update(draft.id, { value: e.target.value })}
-                    disabled={busy}
-                  />
-                </Field>
-                <Field label="Calldata">
-                  <input
-                    className="mono"
-                    value={draft.data}
-                    onChange={(e) => update(draft.id, { data: e.target.value })}
-                    placeholder="0x"
-                    spellCheck={false}
-                    disabled={busy}
-                  />
-                </Field>
-              </div>
+              <Field label="Calldata" hint="Encoded function call, e.g. a TIP-20 transfer() or any contract method.">
+                <input
+                  className="mono"
+                  value={draft.data}
+                  onChange={(e) => update(draft.id, { data: e.target.value })}
+                  placeholder="0x"
+                  spellCheck={false}
+                  disabled={busy}
+                />
+              </Field>
             </>
           )}
         </div>
