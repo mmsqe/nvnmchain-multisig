@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
-import { formatUnits, type Address, type PublicClient } from 'viem'
+import { formatUnits, type Address, type Hex, type PublicClient } from 'viem'
 import { shortAddress } from '../chain'
 import { useTokenMeta, type TokenMeta } from '../lib/hooks'
-import { decodeCall, decodeMultiSend, isMultiSendCall, type DecodedCall, type PackedCall } from '../lib/decode'
+import { decodeMultiSend, isMultiSendCall, selectorOf, type PackedCall } from '../lib/decode'
+import { decodeWithAbis, type AbiEntry, type DecodedWithAbi } from '../lib/contracts'
 import { SAFE_ADDRESSES, type SafeTxParams } from '../lib/safe'
 import { AddressLink, CopyButton } from './ui'
 
@@ -12,39 +13,60 @@ function isAddress(value: unknown): value is Address {
 
 function formatArg(value: unknown): string {
   if (typeof value === 'bigint') return value.toString()
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
   if (isAddress(value)) return shortAddress(value, 4)
   if (Array.isArray(value)) return `[${value.map(formatArg).join(', ')}]`
+  if (value && typeof value === 'object') {
+    return `(${Object.values(value).map(formatArg).join(', ')})`
+  }
+  if (value === null || value === undefined) return ''
   return String(value)
 }
 
+const TOKEN_FUNCTIONS = new Set(['transfer', 'transferFrom', 'approve'])
+
 /** A one-line human summary of a decoded call. */
-function describe(decoded: DecodedCall, meta: TokenMeta | null): string {
-  if (decoded.name === null) {
-    return decoded.selector === '0x' ? 'empty call' : `unknown function ${decoded.selector}`
+function describe(decoded: DecodedWithAbi | null, selector: Hex, meta: TokenMeta | null): string {
+  if (!decoded) {
+    return selector === '0x' ? 'empty call' : `unknown function ${selector}`
   }
   const symbol = meta ? ` ${meta.symbol}` : ''
   const decimals = meta?.decimals ?? 6
   const args = decoded.args
-  if (decoded.name === 'transfer') {
+  const name = decoded.fn.name
+  if (name === 'transfer') {
     const [to, amount] = args as [Address, bigint]
     return `Transfer ${formatUnits(amount, decimals)}${symbol} → ${shortAddress(to, 4)}`
   }
-  if (decoded.name === 'transferFrom') {
+  if (name === 'transferFrom') {
     const [from, to, amount] = args as [Address, Address, bigint]
     return `Transfer ${formatUnits(amount, decimals)}${symbol} · ${shortAddress(from, 4)} → ${shortAddress(to, 4)}`
   }
-  if (decoded.name === 'approve') {
+  if (name === 'approve') {
     const [spender, amount] = args as [Address, bigint]
     return `Approve ${formatUnits(amount, decimals)}${symbol} → ${shortAddress(spender, 4)}`
   }
-  return `${decoded.name}(${args.map(formatArg).join(', ')})`
+  return `${name}(${args.map(formatArg).join(', ')})`
 }
 
-function CallRow({ publicClient, call, index, total }: { publicClient: PublicClient; call: PackedCall; index: number; total: number }) {
-  const decoded = useMemo(() => decodeCall(call.data), [call.data])
-  const token = decoded.name === 'transfer' || decoded.name === 'transferFrom' || decoded.name === 'approve' ? call.to : null
-  const meta = useTokenMeta(publicClient, token)
-  const summary = useMemo(() => describe(decoded, meta), [decoded, meta])
+function CallRow({
+  publicClient,
+  abis,
+  call,
+  index,
+  total,
+}: {
+  publicClient: PublicClient
+  abis: readonly AbiEntry[]
+  call: PackedCall
+  index: number
+  total: number
+}) {
+  const decoded = useMemo(() => decodeWithAbis(abis, call.to, call.data), [abis, call.to, call.data])
+  const selector = selectorOf(call.data)
+  const isTokenCall = decoded !== null && TOKEN_FUNCTIONS.has(decoded.fn.name)
+  const meta = useTokenMeta(publicClient, isTokenCall ? call.to : null)
+  const summary = useMemo(() => describe(decoded, selector, meta), [decoded, selector, meta])
 
   return (
     <div className="tx-call">
@@ -59,6 +81,19 @@ function CallRow({ publicClient, call, index, total }: { publicClient: PublicCli
         </dd>
         <dt>operation</dt>
         <dd>{call.operation === 1 ? 'delegatecall' : 'call'}</dd>
+        {decoded && (
+          <>
+            <dt>function</dt>
+            <dd className="mono-sm truncate" title={decoded.signature}>
+              {decoded.signature}
+            </dd>
+            <dt>interface</dt>
+            <dd>
+              {decoded.entry.name}
+              {decoded.entry.address ? '' : <span className="muted"> · inferred</span>}
+            </dd>
+          </>
+        )}
         {call.value > 0n && (
           <>
             <dt>value</dt>
@@ -66,7 +101,7 @@ function CallRow({ publicClient, call, index, total }: { publicClient: PublicCli
           </>
         )}
         <dt>calldata</dt>
-        <dd className="mono-sm truncate" title={call.data}>
+        <dd className="mono-sm wrap-any" title={call.data}>
           {call.data === '0x' ? <span className="muted">(none)</span> : call.data}
         </dd>
       </dl>
@@ -80,7 +115,15 @@ function CallRow({ publicClient, call, index, total }: { publicClient: PublicCli
 }
 
 /** Decoded, human-readable review of a Safe transaction. */
-export function TransactionReview({ publicClient, tx }: { publicClient: PublicClient; tx: SafeTxParams }) {
+export function TransactionReview({
+  publicClient,
+  tx,
+  abis,
+}: {
+  publicClient: PublicClient
+  tx: SafeTxParams
+  abis: readonly AbiEntry[]
+}) {
   const batch = isMultiSendCall(tx, SAFE_ADDRESSES.multiSendCallOnly)
   const calls = useMemo<PackedCall[]>(() => {
     if (batch) {
@@ -100,7 +143,7 @@ export function TransactionReview({ publicClient, tx }: { publicClient: PublicCl
       </div>
 
       {calls.map((call, index) => (
-        <CallRow key={index} publicClient={publicClient} call={call} index={index} total={calls.length} />
+        <CallRow key={index} publicClient={publicClient} abis={abis} call={call} index={index} total={calls.length} />
       ))}
 
       <details style={{ marginTop: 10 }}>

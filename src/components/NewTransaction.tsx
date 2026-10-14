@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { encodeFunctionData, getAddress, isAddress, type Address, type Hex, type PublicClient } from 'viem'
 import { errorMessage, FEE_TOKEN, feeTokenSymbol, parseUnits, shortAddress } from '../chain'
 import { tip20Abi } from '../lib/abi'
+import { functionRefs, type AbiEntry } from '../lib/contracts'
+import { emptyParam, type ParamValue } from '../lib/abiparams'
 import {
   buildSafeTx,
   computeSafeTxHash,
@@ -17,15 +19,20 @@ import type { PendingTx } from '../lib/storage'
 import type { Wallet } from '../lib/wallet'
 import { Field, Notice } from './ui'
 import { TransactionReview } from './TransactionReview'
+import {
+  ContractCallFields,
+  emptyContractCall,
+  encodeWithEntry,
+  interfaceFor,
+  type ContractCallValue,
+} from './ContractCallFields'
 
-type Draft = {
+type Draft = ContractCallValue & {
   id: string
   kind: 'transfer' | 'raw'
   token: string
   recipient: string
   amount: string
-  to: string
-  data: string
 }
 
 let seq = 0
@@ -36,8 +43,7 @@ const blank = (): Draft => ({
   token: FEE_TOKEN,
   recipient: '',
   amount: '',
-  to: '',
-  data: '0x',
+  ...emptyContractCall(),
 })
 
 function TokenHint({ publicClient, token }: { publicClient: PublicClient; token: string }) {
@@ -50,15 +56,26 @@ function TokenHint({ publicClient, token }: { publicClient: PublicClient; token:
   )
 }
 
+/** Resolve the function a draft will call, defaulting to the first in its interface. */
+function draftFunction(abis: readonly AbiEntry[], d: Draft) {
+  const { abi, name } = interfaceFor(abis, d)
+  if (!abi) return null
+  const refs = functionRefs(abi)
+  const ref = refs.find((r) => r.signature === d.functionSig) ?? refs[0]
+  return ref ? { name, abi, ref } : null
+}
+
 export function NewTransaction({
   wallet,
   safe,
   info,
+  abis,
   onQueued,
 }: {
   wallet: Wallet
   safe: Address
   info: SafeInfo
+  abis: readonly AbiEntry[]
   onQueued: (item: PendingTx) => void
 }) {
   const [drafts, setDrafts] = useState<Draft[]>([blank()])
@@ -109,7 +126,21 @@ export function NewTransaction({
       })
       return { to: getAddress(d.token), value: 0n, data }
     }
+
     if (!isAddress(d.to)) throw new Error('Invalid target address.')
+
+    // Contract call: encode from the selected interface, else raw calldata.
+    const resolved = draftFunction(abis, d)
+    if (resolved) {
+      const { name, abi, ref } = resolved
+      const params: ParamValue[] = ref.fn.inputs.map((input, index) => d.params[index] ?? emptyParam(input))
+      try {
+        return { to: getAddress(d.to), value: 0n, data: encodeWithEntry(abi, ref.signature, params) }
+      } catch (e) {
+        throw new Error(`${name} · ${ref.fn.name}: ${errorMessage(e)}`)
+      }
+    }
+
     return {
       to: getAddress(d.to),
       value: 0n,
@@ -121,6 +152,8 @@ export function NewTransaction({
     if (calls.length === 1) {
       const d = drafts[0]
       if (d.kind === 'transfer') return `Transfer ${d.amount} → ${shortAddress(d.recipient, 4)}`
+      const resolved = draftFunction(abis, d)
+      if (resolved) return `${resolved.name}: ${resolved.ref.fn.name}`
       return `Call ${shortAddress(calls[0].to, 4)}`
     }
     return `${calls.length} calls (MultiSend)`
@@ -248,28 +281,11 @@ export function NewTransaction({
               </div>
             </>
           ) : (
-            <>
-              <Field label="Target">
-                <input
-                  className="mono"
-                  value={draft.to}
-                  onChange={(e) => update(draft.id, { to: e.target.value })}
-                  placeholder="0x…"
-                  spellCheck={false}
-                  disabled={busy}
-                />
-              </Field>
-              <Field label="Calldata" hint="Encoded function call, e.g. a TIP-20 transfer() or any contract method.">
-                <input
-                  className="mono"
-                  value={draft.data}
-                  onChange={(e) => update(draft.id, { data: e.target.value })}
-                  placeholder="0x"
-                  spellCheck={false}
-                  disabled={busy}
-                />
-              </Field>
-            </>
+            <ContractCallFields
+              value={draft}
+              onChange={(patch) => update(draft.id, patch)}
+              abis={abis}
+            />
           )}
         </div>
       ))}
@@ -300,7 +316,7 @@ export function NewTransaction({
         {!wallet.account && <span className="muted small">Connect a wallet to sign.</span>}
       </div>
 
-      {preview && <TransactionReview publicClient={wallet.publicClient} tx={preview} />}
+      {preview && <TransactionReview publicClient={wallet.publicClient} tx={preview} abis={abis} />}
     </section>
   )
 }

@@ -26,6 +26,7 @@ bulletin board; this one does without.
 - **Create a Safe** from any owners and threshold — the address is derived and shown *before* you deploy.
 - **Load a Safe** by address and see its owners, threshold, nonce and fee-token balance.
 - **Build transactions** — TIP-20 transfers or raw contract calls, batched through MultiSend.
+- **Describe contracts with human-readable ABIs** — known interfaces (TIP-20, ERC-20/721/1155, WETH, Multicall3, Safe, NVNM Anchoring, …) ship with the app, and you can add your own; parameter fields are generated from the ABI.
 - **Review before signing or executing** — a decoded view of every call (target, calldata, token amounts, batch contents), plus a pre-sign preview.
 - **Collect approvals without a backend** — off-chain EIP-712 signatures, on-chain `approveHash`, or a single signature sent out-of-band. All three mix and count toward the threshold.
 - **Execute** once the threshold is met — anyone can submit.
@@ -38,6 +39,40 @@ bulletin board; this one does without.
 3. **Create / Load** → create a Safe or open an existing one.
 4. **New transaction** → build a transfer or call, *Preview* it, then sign.
 5. **Queue** → collect the remaining approvals and *Execute*.
+
+## Contract interfaces (human-readable ABI)
+
+The calldata builder and the review view share one registry of **human-readable
+ABIs** ([ox docs](https://oxlib.sh/guides/abi#human-readable-abis)) — one method
+per line. The `function` keyword and parameter names are optional, so a bare
+signature is enough:
+
+```
+transfer(address,uint256)
+approve(address,uint256)
+name() view returns (string)
+```
+
+(Full items like `function transfer(address to, uint256 amount) returns (bool)`
+and `event …` lines work too; a trailing `;` is dropped.)
+
+- **Interfaces** tab: browse the built-ins (TIP-20, ERC-20, ERC-721,
+  ERC-1155, WETH, Ownable, Multicall3, Safe v1.3.0, NVNM Anchoring) and add your own. A custom
+  interface can be bound to a contract address so the builder auto-detects it.
+  Custom interfaces are stored in `localStorage`. The **NVNM Anchoring**
+  interface is bound to its fixed precompile address
+  `0x0000000000000000000000000000000000000A00`, so calls to it are detected and
+  decoded automatically.
+- **New transaction → Contract call**: pick a target and an interface, choose a
+  function and the parameter fields are derived from the ABI — including
+  arrays, fixed-length arrays and (nested) tuples. The encoded calldata is
+  shown live; **Raw calldata** stays available as a fallback.
+- **Type a method inline**: in the builder, pick **Custom method** and enter a
+  single signature like `transfer(address,uint256)` — no name or interface
+  needed; the parameter fields and calldata are derived from it.
+- **Review**: every call is decoded against the registered interfaces
+  (address-bound ones first), so a queued transaction shows its function name
+  and arguments instead of an opaque hex blob.
 
 ## Coordinating signers (no backend)
 
@@ -94,12 +129,15 @@ src/
     safeArtifacts.ts     eip155 addresses + v1.3.0 creation bytecode (generated)
     safe.ts              setup encoding, address prediction, SafeTx hash, sig packing
     decode.ts            calldata decoding + MultiSend unpacking for the review view
+    contracts.ts         human-readable ABI registry (built-ins + user, localStorage)
+    abiparams.ts         ABI parameter model: derive fields, validate, coerce to args
     share.ts             share links, signature codes, deep links
     coordinate.ts        import a single out-of-band owner signature
     storage.ts           localStorage: queued transactions + tracked Safes
     abi.ts, hooks.ts, wallet.ts, theme.ts
   components/            ConnectBar, ContractsPanel, SafePicker, SafeDashboard,
-                         NewTransaction, TransactionReview, Queue
+                         NewTransaction, ContractCallFields, ParamInput, AbiManager,
+                         TransactionReview, Queue
 ```
 
 ## Security

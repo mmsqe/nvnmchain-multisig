@@ -2,19 +2,21 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
 import { getNetwork, getNetworkKey, networkKeyForChainId, setNetworkKey as persistNetwork, errorMessage } from './chain'
 import { useSafeInfo } from './lib/hooks'
+import { allAbis, type AbiEntry } from './lib/contracts'
 import { loadPending, loadTrackedSafes, mergePending, trackSafe, untrackSafe, upsertPending, type PendingTx, type TrackedSafe } from './lib/storage'
 import { clearShareFromLocation, readShareLink, type SignatureShare } from './lib/share'
 import { importSignatureShare } from './lib/coordinate'
 import { useWallet } from './lib/wallet'
 import { ConnectBar } from './components/ConnectBar'
 import { ContractsPanel } from './components/ContractsPanel'
+import { AbiManager } from './components/AbiManager'
 import { NewTransaction } from './components/NewTransaction'
 import { Queue } from './components/Queue'
 import { SafeDashboard } from './components/SafeDashboard'
 import { SafePicker } from './components/SafePicker'
 import { Notice } from './components/ui'
 
-type Tab = 'safe' | 'new' | 'queue' | 'contracts'
+type Tab = 'safe' | 'new' | 'queue' | 'contracts' | 'abis'
 
 export default function App() {
   const wallet = useWallet()
@@ -27,6 +29,8 @@ export default function App() {
   const [shared, setShared] = useState<PendingTx[] | null>(link.txs ?? null)
   const [sharedSig, setSharedSig] = useState<SignatureShare | null>(link.sig ?? null)
   const [sigError, setSigError] = useState<string | null>(null)
+  const [abis, setAbis] = useState<AbiEntry[]>(() => allAbis())
+  const refreshAbis = useCallback(() => setAbis(allAbis()), [])
 
   const { info, error: infoError, refresh: refreshInfo, loading: infoLoading } = useSafeInfo(wallet.publicClient, safe)
 
@@ -104,6 +108,7 @@ export default function App() {
     { key: 'new', label: 'New transaction' },
     { key: 'queue', label: 'Queue', badge: openCount || undefined },
     { key: 'contracts', label: 'Contracts' },
+    { key: 'abis', label: 'Interfaces' },
   ]
 
   return (
@@ -216,6 +221,8 @@ export default function App() {
 
           {tab === 'contracts' && <ContractsPanel wallet={wallet} />}
 
+          {tab === 'abis' && <AbiManager abis={abis} onChanged={refreshAbis} />}
+
           {tab === 'safe' &&
             (safe && info ? (
               <SafeDashboard
@@ -239,7 +246,13 @@ export default function App() {
 
           {tab === 'new' &&
             (safe && info ? (
-              <NewTransaction wallet={wallet} safe={safe} info={info} onQueued={(item) => setPending(upsertPending(item))} />
+              <NewTransaction
+                wallet={wallet}
+                safe={safe}
+                info={info}
+                abis={abis}
+                onQueued={(item) => setPending(upsertPending(item))}
+              />
             ) : (
               <section className="card">
                 <div className="empty">Create or load a Safe first.</div>
@@ -248,7 +261,7 @@ export default function App() {
 
           {tab === 'queue' &&
             (safe && info ? (
-              <Queue wallet={wallet} safe={safe} info={info} pending={pending} onChanged={setPending} onExecuted={() => void refreshInfo()} />
+              <Queue wallet={wallet} safe={safe} info={info} pending={pending} abis={abis} onChanged={setPending} onExecuted={() => void refreshInfo()} />
             ) : (
               <section className="card">
                 <div className="empty">Create or load a Safe first.</div>

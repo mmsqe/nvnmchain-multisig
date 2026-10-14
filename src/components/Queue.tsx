@@ -15,6 +15,7 @@ import {
 import { buildShareUrl, encodeSignatureShare, parseSignatureShare } from '../lib/share'
 import { importSignatureShare } from '../lib/coordinate'
 import type { SafeInfo } from '../lib/hooks'
+import type { AbiEntry } from '../lib/contracts'
 import { markExecuted, mergePending, mergeSignature, removePending, type PendingTx } from '../lib/storage'
 import type { Wallet } from '../lib/wallet'
 import { Notice, TxLink } from './ui'
@@ -61,6 +62,7 @@ function QueuedTxCard({
   safe,
   info,
   item,
+  abis,
   onChanged,
   onExecuted,
   onError,
@@ -69,6 +71,7 @@ function QueuedTxCard({
   safe: Address
   info: SafeInfo
   item: PendingTx
+  abis: readonly AbiEntry[]
   onChanged: (list: PendingTx[]) => void
   onExecuted: () => void
   onError: (message: string | null) => void
@@ -315,7 +318,7 @@ function QueuedTxCard({
         </button>
       </div>
 
-      {showReview && <TransactionReview publicClient={wallet.publicClient} tx={tx} />}
+      {showReview && <TransactionReview publicClient={wallet.publicClient} tx={tx} abis={abis} />}
     </div>
   )
 }
@@ -325,6 +328,7 @@ export function Queue({
   safe,
   info,
   pending,
+  abis,
   onChanged,
   onExecuted,
 }: {
@@ -332,6 +336,7 @@ export function Queue({
   safe: Address
   info: SafeInfo
   pending: PendingTx[]
+  abis: readonly AbiEntry[]
   onChanged: (list: PendingTx[]) => void
   onExecuted: () => void
 }) {
@@ -478,6 +483,7 @@ export function Queue({
               safe={safe}
               info={info}
               item={item}
+              abis={abis}
               onChanged={onChanged}
               onExecuted={onExecuted}
               onError={setError}
