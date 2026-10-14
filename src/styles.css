@@ -308,6 +308,9 @@ label.lbl {
 .stack > * + * {
   margin-top: 12px;
 }
+.param-group {
+  margin-top: 4px;
+}
 
 /* ---------- tabs ---------- */
 .tabs {
@@ -411,6 +414,13 @@ label.lbl {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Show long values (e.g. calldata) in full, wrapping instead of ellipsing. */
+.wrap-any {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
 }
 
 .kv {
