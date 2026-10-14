@@ -5,6 +5,7 @@ import { safeAbi } from '../lib/abi'
 import {
   computeSafeTxHash,
   deserializeTx,
+  executionSucceeded,
   normalizeSignatureV,
   packSignatures,
   preApprovedSignature,
@@ -63,6 +64,7 @@ function QueuedTxCard({
   item,
   abis,
   onChanged,
+  onExecuted,
   onError,
 }: {
   wallet: Wallet
@@ -71,6 +73,7 @@ function QueuedTxCard({
   item: PendingTx
   abis: readonly AbiEntry[]
   onChanged: (list: PendingTx[]) => void
+  onExecuted: () => void
   onError: (message: string | null) => void
 }) {
   const [busy, setBusy] = useState<'sign' | 'approve' | 'execute' | null>(null)
@@ -140,7 +143,8 @@ function QueuedTxCard({
         functionName: 'approveHash',
         args: [item.id],
       })
-      await wallet.publicClient.waitForTransactionReceipt({ hash })
+      const receipt = await wallet.publicClient.waitForTransactionReceipt({ hash })
+      if (receipt.status !== 'success') throw new Error(`approveHash reverted — transaction ${hash}.`)
       await refreshApprovals()
     })
 
@@ -179,7 +183,12 @@ function QueuedTxCard({
           packed,
         ],
       })
-      await wallet.publicClient.waitForTransactionReceipt({ hash })
+      const receipt = await wallet.publicClient.waitForTransactionReceipt({ hash })
+      onExecuted()
+      if (!executionSucceeded(safe, receipt.logs)) {
+        const what = receipt.status === 'success' ? 'The call made by the Safe failed' : 'Execution reverted'
+        throw new Error(`${what} — transaction ${hash}.`)
+      }
       onChanged(markExecuted(item.id, hash))
     })
 
@@ -321,6 +330,7 @@ export function Queue({
   pending,
   abis,
   onChanged,
+  onExecuted,
 }: {
   wallet: Wallet
   safe: Address
@@ -328,6 +338,7 @@ export function Queue({
   pending: PendingTx[]
   abis: readonly AbiEntry[]
   onChanged: (list: PendingTx[]) => void
+  onExecuted: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const [panel, setPanel] = useState<'import' | 'signature' | null>(null)
@@ -474,6 +485,7 @@ export function Queue({
               item={item}
               abis={abis}
               onChanged={onChanged}
+              onExecuted={onExecuted}
               onError={setError}
             />
           ))}

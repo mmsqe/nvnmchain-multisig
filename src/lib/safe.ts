@@ -8,6 +8,7 @@ import {
   keccak256,
   pad,
   recoverAddress,
+  toEventSelector,
   toHex,
   type Address,
   type Hex,
@@ -270,6 +271,13 @@ export function packSignatures(signatures: { owner: Address; signature: Hex }[])
  */
 export function preApprovedSignature(owner: Address): Hex {
   return concat([pad(owner, { size: 32 }), ZERO32, '0x01'])
+}
+
+const EXECUTION_SUCCESS = toEventSelector('ExecutionSuccess(bytes32,uint256)')
+
+/** True when a receipt's logs carry the Safe's ExecutionSuccess; being mined does not mean the call ran. */
+export function executionSucceeded(safe: Address, logs: readonly { address: Address; topics: readonly Hex[] }[]): boolean {
+  return logs.some((log) => log.address.toLowerCase() === safe.toLowerCase() && log.topics[0] === EXECUTION_SUCCESS)
 }
 
 /** Read the deployed Safe suite status. */

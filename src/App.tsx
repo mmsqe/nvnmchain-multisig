@@ -261,7 +261,7 @@ export default function App() {
 
           {tab === 'queue' &&
             (safe && info ? (
-              <Queue wallet={wallet} safe={safe} info={info} pending={pending} abis={abis} onChanged={setPending} />
+              <Queue wallet={wallet} safe={safe} info={info} pending={pending} abis={abis} onChanged={setPending} onExecuted={() => void refreshInfo()} />
             ) : (
               <section className="card">
                 <div className="empty">Create or load a Safe first.</div>

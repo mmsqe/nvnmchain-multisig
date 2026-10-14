@@ -7,6 +7,7 @@ import {
   buildSafeTx,
   computeSafeTxHash,
   encodeSafeSetup,
+  executionSucceeded,
   packMultiSend,
   packSignatures,
   preApprovedSignature,
@@ -80,7 +81,7 @@ async function exec(safe: `0x${string}`, tx: SafeTxParams, signature: `0x${strin
     functionName: 'execTransaction',
     args: [tx.to, tx.value, tx.data, tx.operation, tx.safeTxGas, tx.baseGas, tx.gasPrice, tx.gasToken, tx.refundReceiver, packSignatures([{ owner: account.address, signature }])],
   })
-  return (await pub.waitForTransactionReceipt({ hash })).status
+  return pub.waitForTransactionReceipt({ hash })
 }
 
 // --- deploy the suite (regular CREATE; address derivation is verified separately) ---
@@ -121,7 +122,8 @@ const typed = safeTxTypedData(31337, safe, tx)
 check('hashTypedData == computeSafeTxHash', hashTypedData({ domain: typed.domain, types: typed.types, primaryType: 'SafeTx', message: typed.message }).toLowerCase() === mine.toLowerCase())
 const signature = await signTx(safe, tx)
 check('recoverSigner == signer', (await recoverSigner(mine, signature)).toLowerCase() === account.address.toLowerCase())
-check('execTransaction succeeded', (await exec(safe, tx, signature)) === 'success')
+const executed = await exec(safe, tx, signature)
+check('execTransaction succeeded', executed.status === 'success' && executionSucceeded(safe, executed.logs))
 check('nonce incremented', (await pub.readContract({ address: safe, abi: safeAbi, functionName: 'nonce' })) === 1n)
 
 // --- MultiSend batch: place MultiSendCallOnly at its configured address, then execute ---
@@ -135,7 +137,7 @@ const batchTx = buildSafeTx(calls, 1n)
 check('batch targets MultiSendCallOnly + delegatecall', batchTx.to.toLowerCase() === SAFE_ADDRESSES.multiSendCallOnly.toLowerCase() && batchTx.operation === 1)
 check('batch calldata == multiSend(packMultiSend)', batchTx.data.toLowerCase() === encodeFunctionData({ abi: multiSendCallOnlyAbi, functionName: 'multiSend', args: [packMultiSend(calls)] }).toLowerCase())
 check('batch SafeTx hash matches on-chain', computeSafeTxHash(31337n, safe, batchTx).toLowerCase() === (await readHash(safe, batchTx)).toLowerCase())
-check('batch MultiSend execution succeeded', (await exec(safe, batchTx, await signTx(safe, batchTx))) === 'success')
+check('batch MultiSend execution succeeded', (await exec(safe, batchTx, await signTx(safe, batchTx))).status === 'success')
 
 // --- transaction review decoding ---
 const transferAbi = parseAbi(['function transfer(address to, uint256 amount)'])
@@ -225,6 +227,11 @@ check(
   imported.owner.toLowerCase() === account.address.toLowerCase() &&
     imported.list.find((p) => p.id === hash3)?.signatures[account.address.toLowerCase()] === sig3,
 )
+
+// --- a mined execTransaction is not always an executed call ---
+const failing: SafeTxParams = { ...tx, to: factory, data: '0xdeadbeef', safeTxGas: 100000n, nonce: 3n }
+const failed = await exec(safe, failing, await signTx(safe, failing))
+check('ExecutionFailure is not taken for an execution', failed.status === 'success' && !executionSucceeded(safe, failed.logs))
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

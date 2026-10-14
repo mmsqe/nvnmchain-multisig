@@ -88,7 +88,11 @@ export function SafePicker({
         functionName: 'createProxyWithNonce',
         args: [SAFE_ADDRESSES.safeL2, initializer, BigInt(saltNonce.trim() || '0')],
       })
-      await wallet.publicClient.waitForTransactionReceipt({ hash })
+      const receipt = await wallet.publicClient.waitForTransactionReceipt({ hash })
+      const code = await wallet.publicClient.getCode({ address: predicted })
+      if (receipt.status !== 'success' || !code || code === '0x') {
+        throw new Error(`The Safe was not deployed — transaction ${hash}.`)
+      }
       setCreated(predicted)
       onLoad(predicted)
     } catch (e) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address, PublicClient } from 'viem'
 import { safeAbi, tip20Abi } from './abi'
 import { errorMessage } from '../chain'
@@ -15,11 +15,15 @@ export function useSafeInfo(publicClient: PublicClient, safe: Address | null) {
   const [info, setInfo] = useState<SafeInfo | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const latest = useRef(0)
 
   const refresh = useCallback(async () => {
+    // Only the newest read may write state; an older one can resolve after it.
+    const run = ++latest.current
     if (!safe) {
       setInfo(null)
       setError(null)
+      setLoading(false)
       return
     }
     setLoading(true)
@@ -33,17 +37,20 @@ export function useSafeInfo(publicClient: PublicClient, safe: Address | null) {
         publicClient.readContract({ address: safe, abi: safeAbi, functionName: 'getThreshold' }),
         publicClient.readContract({ address: safe, abi: safeAbi, functionName: 'nonce' }),
       ])
-      setInfo({ version, owners: [...owners], threshold, nonce })
+      if (run === latest.current) setInfo({ version, owners: [...owners], threshold, nonce })
     } catch (e) {
-      setInfo(null)
-      setError(errorMessage(e))
+      if (run === latest.current) setError(errorMessage(e))
     } finally {
-      setLoading(false)
+      if (run === latest.current) setLoading(false)
     }
   }, [publicClient, safe])
 
+  // Another Safe or network starts empty; a refocused window reloads in place.
   useEffect(() => {
+    setInfo(null)
     void refresh()
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
   }, [refresh])
 
   return { info, loading, error, refresh }
