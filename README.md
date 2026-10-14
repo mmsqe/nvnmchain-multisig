@@ -107,9 +107,15 @@ npm run dev      # http://localhost:5174
 npm run build    # type-check + production bundle in dist/
 ```
 
-Push to `main` deploys to GitHub Pages via [`.github/workflows/pages.yml`](.github/workflows/pages.yml); [`ci.yml`](.github/workflows/ci.yml) builds on pull requests. Enable **Settings → Pages → Source: GitHub Actions** once (the workflow can also do it). The base path is derived from the repo name — set `BASE_PATH=/…/` to override.
+Push to `main` deploys to GitHub Pages via [`.github/workflows/pages.yml`](.github/workflows/pages.yml); [`ci.yml`](.github/workflows/ci.yml) type-checks and builds, runs the ABI checks, then runs the Safe integration checks against anvil. Enable **Settings → Pages → Source: GitHub Actions** once (the workflow can also do it). The base path is derived from the repo name — set `BASE_PATH=/…/` to override.
 
-### Verify the integration
+### Verify
+
+`scripts/check-abis.ts` parses every built-in interface, pins the Anchoring selectors and round-trips encode/decode across the parameter model (slowest: none — no chain needed):
+
+```bash
+npm run verify:abis   # requires bun
+```
 
 `scripts/verify-safe.ts` deploys the real Safe v1.3.0 contracts to a local [anvil](https://book.getfoundry.sh/anvil/) node and exercises the whole pipeline: address prediction, owner sorting, EIP-712 hashing, signature recovery, `execTransaction`, MultiSend and single-signature import.
 
@@ -118,7 +124,7 @@ anvil --port 8546 &
 RPC=http://127.0.0.1:8546 npm run verify:safe   # requires bun
 ```
 
-Output ends with `ALL CHECKS PASSED`.
+Both end with `ALL ABI CHECKS PASSED` / `ALL CHECKS PASSED`.
 
 ## Project layout
 

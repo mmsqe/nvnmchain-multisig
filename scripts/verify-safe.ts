@@ -29,7 +29,8 @@ import {
   readShareLink,
 } from '../src/lib/share'
 import { importSignatureShare } from '../src/lib/coordinate'
-import { decodeCall, decodeMultiSend, isMultiSendCall } from '../src/lib/decode'
+import { decodeMultiSend, isMultiSendCall } from '../src/lib/decode'
+import { BUILTIN_ABIS, decodeWithAbis } from '../src/lib/contracts'
 import { upsertPending, type PendingTx } from '../src/lib/storage'
 
 // localStorage shim so the pending-transaction store works under bun.
@@ -139,8 +140,13 @@ check('batch MultiSend execution succeeded', (await exec(safe, batchTx, await si
 // --- transaction review decoding ---
 const transferAbi = parseAbi(['function transfer(address to, uint256 amount)'])
 const transferData = encodeFunctionData({ abi: transferAbi, functionName: 'transfer', args: [account.address, 1234567n] })
-const decoded = decodeCall(transferData) as { name: string | null; args: readonly unknown[] }
-check('decodeCall recognises transfer', decoded.name === 'transfer' && (decoded.args[0] as string).toLowerCase() === account.address.toLowerCase() && decoded.args[1] === 1234567n)
+const decoded = decodeWithAbis(BUILTIN_ABIS, account.address, transferData)
+check(
+  'review decodes transfer',
+  decoded?.fn.name === 'transfer' &&
+    (decoded.args[0] as string).toLowerCase() === account.address.toLowerCase() &&
+    decoded.args[1] === 1234567n,
+)
 const unpacked = decodeMultiSend(batchTx.data)
 check(
   'decodeMultiSend round-trips the batch',

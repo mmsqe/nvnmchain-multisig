@@ -3,7 +3,6 @@ name: CI
 on:
   pull_request:
   push:
-    branches-ignore: [main]
   workflow_dispatch:
 
 permissions:
@@ -27,3 +26,27 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Human-readable ABI checks
+        run: npm run verify:abis
+
+      - name: Setup Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Start anvil
+        run: |
+          anvil --port 8546 &
+          for _ in $(seq 1 30); do
+            cast block-number --rpc-url http://127.0.0.1:8546 >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "anvil failed to start" >&2
+          exit 1
+
+      - name: Safe v1.3.0 integration checks
+        run: npm run verify:safe
+        env:
+          RPC: http://127.0.0.1:8546
