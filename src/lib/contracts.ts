@@ -160,7 +160,7 @@ const KNOWN_COMMON: AbiEntry[] = [
     // https://github.com/NVNM-Chain/nvnmchain-contracts/blob/main/src/IAnchoring.sol
     id: 'builtin:anchoring',
     name: 'NVNM Anchoring',
-    // The x/anchoring precompile lives at a fixed address.
+    // The x/anchoring contract, behind an ERC-1967 proxy at the precompile's old address.
     address: '0x0000000000000000000000000000000000000A00' as Address,
     source: 'builtin',
     items: [
@@ -177,7 +177,10 @@ const KNOWN_COMMON: AbiEntry[] = [
       'function grantRole(uint64 registryId, string checksum, address account, string role)',
       'function revokeRole(uint64 registryId, string checksum, address account, string role)',
       'function transferOwnership(address newOwner)',
+      'function upgradeToAndCall(address newImplementation, bytes data) payable',
+      'function proxiableUUID() view returns (bytes32)',
       'event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)',
+      'event Upgraded(address indexed implementation)',
       'event AddRegistry(address indexed caller, uint64 registryId, string name)',
       'event AddRecord(address indexed caller, uint64 registryId, uint64 recordId, uint64 index, string checksum)',
       'event UpdateRecordStatus(address indexed caller, uint64 registryId, uint64 recordId, uint64 index, string status)',
