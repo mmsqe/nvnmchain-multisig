@@ -25,16 +25,29 @@ export const NETWORKS = {
     rpcUrl: 'https://rpc.nvnm.canary.mantrachain.dev',
     explorerUrl: 'https://explorer.nvnm.canary.mantrachain.dev',
     explorerName: 'nvnmchain Explorer',
-    feeTokenSymbol: 'pathUSD',
+    feeTokenSymbol: 'nUSD',
+  },
+  /** A node on this machine, listed by `npm run dev` only; `VITE_LOCAL_RPC` overrides the URL. */
+  local: {
+    key: 'local',
+    name: 'NVNM Local',
+    chainId: 787222,
+    rpcUrl: (import.meta.env.VITE_LOCAL_RPC as string | undefined) ?? 'http://127.0.0.1:8545',
+    explorerUrl: 'http://127.0.0.1:8080',
+    explorerName: 'Local explorer',
+    feeTokenSymbol: 'nUSD',
   },
 } as const
 
 export type NetworkKey = keyof typeof NETWORKS
 
-export const NETWORK_KEYS = Object.keys(NETWORKS) as NetworkKey[]
+export const NETWORK_KEYS = (Object.keys(NETWORKS) as NetworkKey[]).filter(
+  (key) => key !== 'local' || import.meta.env.DEV,
+)
 
-/** The configured network with the given chain id, if any. */
+/** The configured network with the given chain id, if any; the selected one wins a shared id. */
 export function networkKeyForChainId(chainId: number): NetworkKey | null {
+  if (getNetwork().chainId === chainId) return getNetworkKey()
   for (const key of NETWORK_KEYS) {
     if (NETWORKS[key].chainId === chainId) return key
   }
@@ -56,7 +69,7 @@ export function getNetworkKey(): NetworkKey {
   } catch {
     /* storage unavailable */
   }
-  activeKey = stored && stored in NETWORKS ? (stored as NetworkKey) : DEFAULT_NETWORK
+  activeKey = NETWORK_KEYS.includes(stored as NetworkKey) ? (stored as NetworkKey) : DEFAULT_NETWORK
   return activeKey
 }
 
